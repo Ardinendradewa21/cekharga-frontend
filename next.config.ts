@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "68070fa9598f.ngrok-free.app", // izin untuk localhost Laravel
+        hostname: "**.ngrok-free.app", // izin untuk localhost Laravel
       },
     ]
   },
