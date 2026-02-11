@@ -88,6 +88,11 @@ export interface Produk {
   marketplace_links?: MarketplaceLink[]; // sesuaikan dengan nama relasi di JSON API
   brand?: Brand; // relasi ke brand
   marketplace?: MarketplaceLink;
+  updated_at?: string; 
+  created_at?: string;
+
+  reviews?: ProductReview[];
+
 }
 export interface Brand {
   id: number;
@@ -99,4 +104,12 @@ export interface Brand {
 export interface ApiResponse<T> {
   status: string;
   data: T;
+}
+export interface ProductReview {
+  id: number;
+  reviewer_name: string;
+  video_url: string;
+  highlight_quote?: string;
+  platform: 'youtube' | 'tiktok';
+  thumbnail?: string;
 }

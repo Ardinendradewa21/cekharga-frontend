@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import ProductCard from "@/components/ProductCard";
 import Footer from "@/components/Footer";
 import FilterSidebar, { FilterState } from "@/components/FilterSidebar";
@@ -16,7 +16,7 @@ import Link from "next/link";
 
 function HomeContent() {
   const searchParams = useSearchParams();
-  const urlSearch = searchParams.get("search");
+  const urlSearch = searchParams.get("search"); // atau 'q' sesuaikan dengan searchbar.tsx
 
   const [products, setProducts] = useState<Produk[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,13 +31,12 @@ function HomeContent() {
   const [lastPage, setLastPage] = useState(1);
   const [compareList, setCompareList] = useState<string[]>([]);
   
-  // 🔥 STATE BARU: UNTUK MENGONTROL SEARCH BAR KECIL
+  // STATE BARU: UNTUK MENGONTROL SEARCH BAR KECIL
   const [showStickySearch, setShowStickySearch] = useState(false);
 
-  // 0. LOGIC SCROLL LISTENER (Agar Search Bar Kecil Muncul Saat Scroll)
+  // 0. LOGIC SCROLL LISTENER
   useEffect(() => {
     const handleScroll = () => {
-      // Jika scroll lebih dari 400px (melewati Hero), tampilkan search kecil
       if (window.scrollY > 350) {
         setShowStickySearch(true);
       } else {
@@ -49,11 +48,13 @@ function HomeContent() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // 1. SINKRONISASI URL
+  // 1. SINKRONISASI URL (Search dari Luar/Hero)
   useEffect(() => {
     if (urlSearch) {
       setSearchQuery(urlSearch);
-      // Auto scroll ke hasil jika ada search dari URL
+      // Reset filter jika ada pencarian baru dari URL (Search Overrides Filter)
+      setFilters({ brands: "", min_price: "", max_price: "" });
+      
       setTimeout(() => {
          const section = document.getElementById("product-section");
          if(section) section.scrollIntoView({ behavior: "smooth" });
@@ -61,7 +62,22 @@ function HomeContent() {
     }
   }, [urlSearch]);
 
-  // 2. Fetch Data (Tetap Sama)
+  // 🔥 LOGIC BARU: FILTER OVERRIDES SEARCH
+  // Kita buat fungsi khusus untuk menangani perubahan filter
+  const handleFilterChange = (newFilters: Partial<FilterState>) => {
+    setFilters(prev => {
+        const updatedFilters = { ...prev, ...newFilters };
+        
+        // LOGIC UTAMA: Jika user memilih Brand, hapus Search Query
+        if (newFilters.brands && newFilters.brands.length > 0) {
+            setSearchQuery(""); // <--- INI KUNCINYA (Auto Clear Search)
+        }
+        
+        return updatedFilters;
+    });
+  };
+
+  // 2. Fetch Data
   useEffect(() => {
     async function fetchProducts() {
       setLoading(true);
@@ -117,7 +133,7 @@ function HomeContent() {
       {/* NAVBAR SIMPLE */}
       <nav className="bg-white border-b border-slate-100 py-4 relative z-50">
         <div className="container mx-auto px-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setSearchQuery(""); window.scrollTo(0,0); }}>
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setSearchQuery(""); setFilters({brands: "", min_price: "", max_price: ""}); window.scrollTo(0,0); }}>
                 <div className="bg-blue-600 p-1.5 rounded-lg">
                     <Smartphone className="w-5 h-5 text-white" />
                 </div>
@@ -133,14 +149,12 @@ function HomeContent() {
         <HeroSection />
       </div>
       
-
       {/* STICKY SEARCH & FILTER BAR */}
       <div id="product-section" className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all py-3">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             
-            {/* --- SEARCH BAR KECIL (SCROLL-AWARE) --- */}
-            {/* Logic: Opacity 0 kalau di atas, Opacity 100 kalau scroll ke bawah */}
+            {/* --- SEARCH BAR KECIL --- */}
             <div className={`relative w-full md:max-w-md group transition-all duration-300 ${showStickySearch ? 'opacity-100 translate-y-0 visible' : 'opacity-0 -translate-y-2 invisible'}`}>
                 <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
@@ -150,7 +164,11 @@ function HomeContent() {
                   placeholder="Cari HP di sini..." 
                   className="pl-10 h-10 rounded-full border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm shadow-sm transition-all"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    // Opsional: Jika user ngetik manual, mau reset filter brand nggak?
+                    // if (e.target.value) setFilters(prev => ({ ...prev, brands: "" })); 
+                  }}
                 />
                 {searchQuery && (
                   <button 
@@ -162,7 +180,7 @@ function HomeContent() {
                 )}
             </div>
 
-            {/* SORTING & COUNT (SELALU MUNCUL) */}
+            {/* SORTING & FILTER */}
             <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
                 <span className="text-xs text-slate-500 hidden sm:inline-block">
                     Menampilkan <span className="font-bold text-slate-900">{products.length}</span> produk
@@ -170,7 +188,8 @@ function HomeContent() {
                 
                 <div className="flex items-center gap-2">
                     <div className="lg:hidden">
-                        <MobileFilter onFilterChange={(newFilters) => setFilters(prev => ({...prev, ...newFilters}))} />
+                        {/* UPDATE: Pakai handleFilterChange */}
+                        <MobileFilter onFilterChange={handleFilterChange} />
                     </div>
                     
                     <select 
@@ -220,7 +239,8 @@ function HomeContent() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           
           <div className="hidden lg:block lg:col-span-1 h-fit sticky top-24">
-             <FilterSidebar onFilterChange={(newFilters) => setFilters(prev => ({...prev, ...newFilters}))} />
+             {/* UPDATE: Pakai handleFilterChange */}
+             <FilterSidebar onFilterChange={handleFilterChange} />
           </div>
 
           <div className="lg:col-span-3">
@@ -254,7 +274,7 @@ function HomeContent() {
                   ) : (
                     <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
                       <div className="inline-flex bg-slate-50 p-6 rounded-full mb-4">
-                         <Search className="w-10 h-10 text-slate-300" />
+                          <Search className="w-10 h-10 text-slate-300" />
                       </div>
                       <h3 className="text-xl font-bold text-slate-700">Tidak ditemukan</h3>
                       <p className="text-slate-500">Coba atur ulang filter atau kata kunci lain.</p>
