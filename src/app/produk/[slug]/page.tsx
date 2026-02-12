@@ -1,12 +1,15 @@
+import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Produk, ApiResponse, MarketplaceLink } from "@/types";
+import { Produk, MarketplaceLink } from "@/types";
 import { ArrowLeft, Camera, Cpu, Smartphone, Check, X, Share2, Scale, Monitor, ShoppingBag, ExternalLink, RefreshCw, PlayCircle, MessageSquareQuote } from "lucide-react"; 
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { getProductBySlug } from "@/server/repositories/product-repository";
+import { SITE_NAME, absoluteUrl } from "@/lib/seo";
 
 // --- 0. DEFINISI TIPE LOKAL ---
 interface ExtendedMarketplaceLink extends MarketplaceLink {
@@ -20,17 +23,8 @@ interface ExtendedMarketplaceLink extends MarketplaceLink {
 
 // --- 1. FUNGSI AMBIL DATA ---
 async function getProductDetail(slug: string) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   try {
-    const res = await fetch(`${apiUrl}/products/${slug}`, { 
-      cache: "no-store",
-      next: { revalidate: 0 } 
-    });
-
-    if (!res.ok) return null;
-    const result: ApiResponse<Produk> = await res.json();
-    return result.data;
-
+    return (await getProductBySlug(slug)) as Produk | null;
   } catch (error) {
     console.error("Error fetching product:", error);
     return null;
@@ -40,6 +34,57 @@ async function getProductDetail(slug: string) {
 type Props = {
   params: Promise<{ slug: string }>;
 };
+
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
+  const product = await getProductDetail(params.slug);
+
+  if (!product) {
+    return {
+      title: "Produk tidak ditemukan",
+      robots: { index: false, follow: false },
+    };
+  }
+
+  const description = [
+    `${product.nama_produk} (${product.tahun_rilis || "-"})`,
+    product.spesifikasi?.chipset ? `Chipset ${product.spesifikasi.chipset}` : "",
+    product.harga_terendah_baru ? `Harga mulai ${formatRupiah(product.harga_terendah_baru)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  const canonicalUrl = absoluteUrl(`/produk/${product.slug}`);
+  const imagePath = getImageUrl(product.foto);
+  const imageUrl = imagePath ? (imagePath.startsWith("http") ? imagePath : absoluteUrl(imagePath)) : absoluteUrl("/next.svg");
+
+  return {
+    title: `${product.nama_produk} - Harga & Spesifikasi`,
+    description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: `${product.nama_produk} - Harga & Spesifikasi`,
+      description,
+      url: canonicalUrl,
+      type: "article",
+      siteName: SITE_NAME,
+      images: [
+        {
+          url: imageUrl,
+          alt: product.nama_produk,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${product.nama_produk} - Harga & Spesifikasi`,
+      description,
+      images: [imageUrl],
+    },
+  };
+}
 
 // --- HELPERS ---
 const formatRupiah = (num?: number): string => {
@@ -74,7 +119,7 @@ const renderVarian = (data: unknown) => {
     try {
       if (data.trim().startsWith('[')) items = JSON.parse(data);
       else items = data.split(',').map(s => s.trim());
-    } catch (e) { items = [data]; }
+    } catch { items = [data]; }
   }
 
   return (
@@ -92,12 +137,13 @@ const renderVarian = (data: unknown) => {
 const getImageUrl = (path: string | null | undefined): string | null => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  if (cleanPath.startsWith("uploads/")) return `/${cleanPath}`;
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
   try {
     const baseUrl = new URL(apiUrl).origin;
-    const cleanPath = path.startsWith('/') ? path.substring(1) : path;
     return `${baseUrl}/storage/${cleanPath}`;
-  } catch (e) { return null; }
+  } catch { return null; }
 };
 
 // 🔥 HELPER PARSE VIDEO URL (YOUTUBE & TIKTOK)
@@ -142,11 +188,45 @@ export default async function ProductDetailPage(props: Props) {
   const product = await getProductDetail(slug);
   if (!product) return notFound();
   
-  const sortedLinks = product.marketplace_links?.sort((a, b) => a.harga - b.harga) || [];
+  const sortedLinks = [...(product.marketplace_links || [])].sort((a, b) => a.harga - b.harga);
   const lowestPriceLink = sortedLinks.length > 0 ? sortedLinks[0] : null;
+  const priceSyncAt = product.price_last_updated_at || product.updated_at;
+  const isPriceStale = product.price_data_status === "stale";
+  const imagePath = getImageUrl(product.foto);
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.nama_produk,
+    image: imagePath ? (imagePath.startsWith("http") ? imagePath : absoluteUrl(imagePath)) : undefined,
+    brand: {
+      "@type": "Brand",
+      name: (product.brand as { nama_brand?: string } | null)?.nama_brand ?? "Unknown",
+    },
+    sku: product.slug,
+    releaseDate: product.spesifikasi?.tanggal_rilis ?? undefined,
+    description: `${product.nama_produk} dengan chipset ${product.spesifikasi?.chipset ?? "-"}`,
+    offers: sortedLinks
+      .filter((link) => link.status_aktif)
+      .slice(0, 5)
+      .map((link) => ({
+        "@type": "Offer",
+        priceCurrency: "IDR",
+        price: link.harga,
+        url: link.url_produk,
+        availability: "https://schema.org/InStock",
+        seller: {
+          "@type": "Organization",
+          name: link.nama_marketplace,
+        },
+      })),
+  };
 
   return (
     <main className="min-h-screen bg-[#F8F9FA] pb-20 selection:bg-blue-100 font-sans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+      />
       
       {/* HEADER STICKY */}
       <div className="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 transition-all shadow-sm">
@@ -207,9 +287,15 @@ export default async function ProductDetailPage(props: Props) {
                   </div>
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full border border-green-200">
                      <RefreshCw className="w-3 h-3" />
-                     Sync: {formatTimeAgo(product.updated_at)}
+                     Sync: {formatTimeAgo(priceSyncAt || undefined)}
                   </div>
               </div>
+
+              {isPriceStale ? (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Data harga terakhir cukup lama. Disarankan cek ulang marketplace sebelum transaksi.
+                </div>
+              ) : null}
               
               <div className="space-y-3">
                 {sortedLinks.length > 0 ? (

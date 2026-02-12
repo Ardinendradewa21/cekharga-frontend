@@ -20,6 +20,8 @@ export interface FilterState {
   brands: string;
   min_price: string;
   max_price: string;
+  use_case: string;
+  has_nfc: string;
 }
 
 interface FilterSidebarProps {
@@ -32,14 +34,15 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [useCase, setUseCase] = useState("");
+  const [hasNfc, setHasNfc] = useState(false);
 
   // 1. Ambil List Brand dari API
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    fetch(`${apiUrl}/brands`)
+    fetch("/api/brands")
       .then((res) => res.json())
       .then((data) => {
-        if (data.status === 'success') setBrands(data.data);
+        if (data.success || data.status === 'success') setBrands(data.data);
       })
       .catch((err) => console.error("Gagal ambil brand:", err));
   }, []);
@@ -52,7 +55,7 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
     
     setSelectedBrands(updated);
     // Kirim perubahan langsung ke parent
-    applyFilter(updated, minPrice, maxPrice);
+    applyFilter(updated, minPrice, maxPrice, useCase, hasNfc);
   };
 
   // 3. Logic Reset
@@ -60,15 +63,25 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
     setSelectedBrands([]);
     setMinPrice("");
     setMaxPrice("");
-    applyFilter([], "", "");
+    setUseCase("");
+    setHasNfc(false);
+    applyFilter([], "", "", "", false);
   };
 
   // 4. Helper kirim data
-  const applyFilter = (brands: string[], min: string, max: string) => {
+  const applyFilter = (
+    brands: string[],
+    min: string,
+    max: string,
+    useCaseValue: string,
+    hasNfcValue: boolean,
+  ) => {
     onFilterChange({
       brands: brands.join(","),
       min_price: min,
       max_price: max,
+      use_case: useCaseValue,
+      has_nfc: hasNfcValue ? "1" : "",
     });
   };
 
@@ -109,10 +122,47 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
           size="sm" 
           variant="secondary" 
           className="w-full text-xs font-bold"
-          onClick={() => applyFilter(selectedBrands, minPrice, maxPrice)}
+          onClick={() => applyFilter(selectedBrands, minPrice, maxPrice, useCase, hasNfc)}
         >
           Terapkan Harga
         </Button>
+      </div>
+
+      <Separator className="my-6" />
+
+      {/* --- FILTER KEBUTUHAN --- */}
+      <div className="space-y-3">
+        <Label className="text-xs font-bold text-slate-400 uppercase">Kategori Kebutuhan</Label>
+        <select
+          value={useCase}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setUseCase(nextValue);
+            applyFilter(selectedBrands, minPrice, maxPrice, nextValue, hasNfc);
+          }}
+          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+        >
+          <option value="">Semua Kebutuhan</option>
+          <option value="gaming">Gaming (AnTuTu tinggi)</option>
+          <option value="camera">Fotografi (kamera utama &gt;= 50MP)</option>
+          <option value="battery">Baterai Awet (&gt;= 5000mAh)</option>
+          <option value="daily">Harian Komplit (NFC + baterai besar)</option>
+        </select>
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="only-nfc"
+            checked={hasNfc}
+            onCheckedChange={(checked) => {
+              const nextValue = Boolean(checked);
+              setHasNfc(nextValue);
+              applyFilter(selectedBrands, minPrice, maxPrice, useCase, nextValue);
+            }}
+          />
+          <label htmlFor="only-nfc" className="text-sm text-slate-600">
+            Hanya tampilkan yang ada NFC
+          </label>
+        </div>
       </div>
 
       <Separator className="my-6" />

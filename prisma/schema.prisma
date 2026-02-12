@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  name              String    @db.VarChar(255)
+  email             String    @unique(map: "users_email_unique") @db.VarChar(255)
+  email_verified_at DateTime? @db.Timestamp(0)
+  password          String    @db.VarChar(255)
+  remember_token    String?   @db.VarChar(100)
+  created_at        DateTime? @db.Timestamp(0)
+  updated_at        DateTime? @db.Timestamp(0)
+
+  @@map("users")
+}
+
+model Brand {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  nama_brand String    @db.VarChar(255)
+  slug       String    @unique(map: "brands_slug_unique") @db.VarChar(255)
+  logo       String?   @db.VarChar(255)
+  created_at DateTime? @db.Timestamp(0)
+  updated_at DateTime? @db.Timestamp(0)
+  products   Product[]
+
+  @@map("brands")
+}
+
+model Marketplace {
+  id         BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  nama       String            @db.VarChar(255)
+  slug       String            @db.VarChar(255)
+  logo       String?           @db.VarChar(255)
+  warna_hex  String            @default("#000000") @db.VarChar(255)
+  text_color String            @default("#ffffff") @db.VarChar(255)
+  created_at DateTime?         @db.Timestamp(0)
+  updated_at DateTime?         @db.Timestamp(0)
+  links      MarketplaceLink[]
+
+  @@map("marketplaces")
+}
+
+model Product {
+  id                   BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  nama_produk          String            @db.VarChar(255)
+  slug                 String            @unique(map: "produk_slug_unique") @db.VarChar(255)
+  foto                 String?           @db.VarChar(255)
+  id_brand             BigInt            @default(1) @db.UnsignedBigInt
+  tahun_rilis          Int?              @db.Year
+  harga_terendah_baru  Decimal?          @db.Decimal(15, 2)
+  harga_terendah_bekas Decimal?          @db.Decimal(15, 2)
+  status               ProductStatus     @default(aktif)
+  jumlah_dilihat       BigInt            @default(0)
+  created_at           DateTime?         @db.Timestamp(0)
+  updated_at           DateTime?         @db.Timestamp(0)
+  brand                Brand             @relation(fields: [id_brand], references: [id])
+  marketplace_links    MarketplaceLink[]
+  spesifikasi_produk   Specification[]
+  reviews              Review[]
+
+  @@index([id_brand], map: "produk_id_brand_index")
+  @@index([harga_terendah_baru], map: "produk_harga_terendah_baru_index")
+  @@index([harga_terendah_bekas], map: "produk_harga_terendah_bekas_index")
+  @@map("produk")
+}
+
+model Specification {
+  id                   BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id_produk            BigInt    @db.UnsignedBigInt
+  teknologi_jaringan   String?   @db.VarChar(255)
+  tanggal_rilis        DateTime? @db.Date
+  dimensi              String?   @db.VarChar(255)
+  berat                String?   @db.VarChar(255)
+  rating_ip            String?   @db.VarChar(255)
+  tipe_layar           String?   @db.VarChar(255)
+  ukuran_layar         Decimal?  @db.Decimal(4, 1)
+  resolusi             String?   @db.VarChar(255)
+  proteksi_layar       String?   @db.VarChar(255)
+  os                   String?   @db.VarChar(255)
+  chipset              String?   @db.VarChar(255)
+  ada_slot_memori      Boolean   @default(false)
+  varian_internal      Json?
+  tipe_memori          String?   @db.VarChar(255)
+  kamera_utama_mp      Int?
+  detail_kamera_utama  String?   @db.Text
+  kamera_utama_video   String?   @db.VarChar(255)
+  video_kamera_utama   String?   @db.VarChar(255)
+  kamera_selfie_mp     Int?
+  kamera_selfie_video  String?   @db.VarChar(255)
+  detail_kamera_selfie String?   @db.Text
+  ada_nfc              Boolean   @default(false)
+  ada_jack_audio       Boolean   @default(false)
+  kapasitas_baterai    Int?
+  kecepatan_cas        String?   @db.VarChar(255)
+  sensor               String?   @db.Text
+  skor_antutu          Int?
+  skor_geekbench       Int?
+  skor_dxomark         Int?
+  bintang_performa     Int       @default(0) @db.TinyInt
+  bintang_kamera       Int       @default(0) @db.TinyInt
+  bintang_baterai      Int       @default(0) @db.TinyInt
+  kesimpulan_singkat   String?   @db.VarChar(255)
+  created_at           DateTime? @db.Timestamp(0)
+  updated_at           DateTime? @db.Timestamp(0)
+  sound_loudspeaker    String?   @db.VarChar(255)
+  sound_jack           String?   @db.VarChar(255)
+  comms_wlan           String?   @db.VarChar(255)
+  comms_bluetooth      String?   @db.VarChar(255)
+  comms_gps            String?   @db.VarChar(255)
+  comms_usb            String?   @db.VarChar(255)
+  product              Product   @relation(fields: [id_produk], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "spesifikasi_produk_id_produk_foreign")
+
+  @@index([id_produk], map: "spesifikasi_produk_id_produk_foreign")
+  @@index([rating_ip], map: "spesifikasi_produk_rating_ip_index")
+  @@index([ukuran_layar], map: "spesifikasi_produk_ukuran_layar_index")
+  @@index([chipset], map: "spesifikasi_produk_chipset_index")
+  @@index([kamera_utama_mp], map: "spesifikasi_produk_kamera_utama_mp_index")
+  @@index([ada_nfc], map: "spesifikasi_produk_ada_nfc_index")
+  @@index([kapasitas_baterai], map: "spesifikasi_produk_kapasitas_baterai_index")
+  @@index([skor_antutu], map: "spesifikasi_produk_skor_antutu_index")
+  @@map("spesifikasi_produk")
+}
+
+model MarketplaceLink {
+  id               BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  produk_id        BigInt       @db.UnsignedBigInt
+  marketplace_id   BigInt?      @db.UnsignedBigInt
+  nama_marketplace String       @db.VarChar(255)
+  nama_toko        String?      @db.VarChar(255)
+  harga            Decimal      @db.Decimal(15, 2)
+  url_produk       String       @db.Text
+  kondisi          String       @default("baru") @db.VarChar(255)
+  status_aktif     Boolean      @default(true)
+  created_at       DateTime?    @db.Timestamp(0)
+  updated_at       DateTime?    @db.Timestamp(0)
+  marketplace      Marketplace? @relation(fields: [marketplace_id], references: [id], onUpdate: NoAction, map: "marketplace_links_marketplace_id_foreign")
+  product          Product      @relation(fields: [produk_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "marketplace_links_produk_id_foreign")
+
+  @@index([produk_id], map: "marketplace_links_produk_id_foreign")
+  @@index([marketplace_id], map: "marketplace_links_marketplace_id_foreign")
+  @@map("marketplace_links")
+}
+
+model Review {
+  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  produk_id       BigInt    @db.UnsignedBigInt
+  reviewer_name   String    @db.VarChar(255)
+  platform        String    @db.VarChar(50)
+  video_url       String    @db.Text
+  highlight_quote String?   @db.Text
+  created_at      DateTime? @default(now()) @db.Timestamp(0)
+  updated_at      DateTime? @default(now()) @db.Timestamp(0)
+  product         Product   @relation(fields: [produk_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "reviews_produk_id_foreign")
+
+  @@index([produk_id], map: "reviews_produk_id_index")
+  @@map("reviews")
+}
+
+enum ProductStatus {
+  aktif
+  draft
+
+  @@map("produk_status")
+}

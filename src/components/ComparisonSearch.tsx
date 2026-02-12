@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X, Loader2, Smartphone } from "lucide-react";
@@ -21,6 +21,10 @@ const getImageUrl = (path: string | null | undefined): string | null => {
   if (typeof path === 'string' && (path.startsWith("http") || path.startsWith("https"))) {
     return path;
   }
+  const cleanPath = path?.startsWith('/') ? path.substring(1) : path;
+  if (cleanPath?.startsWith("uploads/")) {
+    return `/${cleanPath}`;
+  }
   
   // 2. Jika data baru (Upload dari Filament)
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -28,9 +32,8 @@ const getImageUrl = (path: string | null | undefined): string | null => {
   try {
     const urlObj = new URL(apiUrl);
     const baseUrl = urlObj.origin; 
-    const cleanPath = path?.startsWith('/') ? path.substring(1) : path;
     return `${baseUrl}/storage/${cleanPath}`;
-  } catch (e) {
+  } catch {
     // Fallback aman jika URL env error
     return `http://127.0.0.1:8000/storage/${path}`;
   }
@@ -42,6 +45,24 @@ export default function ComparisonSearch({ onSelect, onClose, excludeSlug }: Com
   const [loading, setLoading] = useState(false);
 
   // Debounce search
+  const searchProducts = useCallback(async (keyword: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/products?search=${encodeURIComponent(keyword)}`);
+      const data: ApiResponse<Produk[]> = await res.json();
+      
+      if (data.success || data.status === 'success') {
+        // Filter agar produk yang sedang dibandingkan tidak muncul lagi di pencarian
+        const filtered = data.data.filter(p => p.slug !== excludeSlug);
+        setResults(filtered);
+      }
+    } catch (error) {
+      console.error("Search error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [excludeSlug]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query.length >= 2) {
@@ -52,27 +73,7 @@ export default function ComparisonSearch({ onSelect, onClose, excludeSlug }: Com
     }, 500); // Tunggu 500ms setelah user selesai mengetik
 
     return () => clearTimeout(timer);
-  }, [query]);
-
-  async function searchProducts(keyword: string) {
-    setLoading(true);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    try {
-      // Panggil API Search Laravel
-      const res = await fetch(`${apiUrl}/products?search=${keyword}`);
-      const data: ApiResponse<Produk[]> = await res.json();
-      
-      if (data.status === 'success') {
-        // Filter agar produk yang sedang dibandingkan tidak muncul lagi di pencarian
-        const filtered = data.data.filter(p => p.slug !== excludeSlug);
-        setResults(filtered);
-      }
-    } catch (error) {
-      console.error("Search error:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  }, [query, searchProducts]);
 
   return (
     <div className="absolute top-0 left-0 w-full h-full bg-white z-50 p-4 rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-200">

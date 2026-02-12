@@ -6,6 +6,7 @@ export interface Spesifikasi {
   
   // 1. Body
   teknologi_jaringan?: string;
+  tanggal_rilis?: string;
   dimensi?: string;
   berat?: string;
   rating_ip?: string;
@@ -70,6 +71,8 @@ export interface MarketplaceLink {
   url_produk: string;
   kondisi: 'baru' | 'bekas';
   status_aktif: boolean;
+  updated_at?: string;
+  created_at?: string;
 }
 
 export interface Produk {
@@ -90,6 +93,13 @@ export interface Produk {
   marketplace?: MarketplaceLink;
   updated_at?: string; 
   created_at?: string;
+  price_last_updated_at?: string | null;
+  price_data_age_hours?: number | null;
+  price_data_status?: 'fresh' | 'warning' | 'stale' | 'unknown';
+  price_source_count?: number;
+  shopee_price?: number | null;
+  tokopedia_price?: number | null;
+  blibli_price?: number | null;
 
   reviews?: ProductReview[];
 
@@ -102,8 +112,15 @@ export interface Brand {
 }
 
 export interface ApiResponse<T> {
-  status: string;
+  success: boolean;
   data: T;
+  message: string;
+  status?: string;
+  meta?: {
+    current_page: number;
+    last_page: number;
+    total: number;
+  };
 }
 export interface ProductReview {
   id: number;

@@ -16,6 +16,8 @@ const getImageUrl = (path: string | null | undefined): string | null => {
   
   // Jika path sudah full URL (https://...), langsung pakai
   if (path.startsWith("http") || path.startsWith("https")) return path;
+  const cleanPath = path.startsWith("/") ? path.substring(1) : path;
+  if (cleanPath.startsWith("uploads/")) return `/${cleanPath}`;
   
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
   
@@ -25,11 +27,9 @@ const getImageUrl = (path: string | null | undefined): string | null => {
     const baseUrl = urlObj.origin; 
     
     // Bersihkan path dari slash depan ganda
-    const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-    
     // Gabungkan dengan folder storage
     return `${baseUrl}/storage/${cleanPath}`;
-  } catch (e) {
+  } catch {
     // Fallback darurat
     return `http://127.0.0.1:8000/storage/${path}`;
   }
@@ -60,11 +60,10 @@ export default function HeroSection() {
       setIsLoading(true);
       setShowDropdown(true);
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-        const res = await fetch(`${apiUrl}/products?search=${query}`);
+        const res = await fetch(`/api/products?search=${encodeURIComponent(query)}`);
         const json: ApiResponse<Produk[]> = await res.json();
         
-        if (json.status === 'success') {
+        if (json.success || json.status === 'success') {
           setResults(json.data.slice(0, 5)); 
         }
       } catch (error) {

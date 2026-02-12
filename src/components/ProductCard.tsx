@@ -4,7 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Produk } from "@/types";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowUpRight, Smartphone, Scale, Clock, ShoppingBag } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Clock, Scale, ShoppingBag, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ProductCardProps {
@@ -30,12 +30,13 @@ const timeAgo = (dateString?: string) => {
 const getImageUrl = (path: string | null | undefined): string | null => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  if (cleanPath.startsWith("uploads/")) return `/${cleanPath}`;
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
   try {
     const baseUrl = new URL(apiUrl).origin;
-    const cleanPath = path.startsWith('/') ? path.substring(1) : path;
     return `${baseUrl}/storage/${cleanPath}`;
-  } catch (e) { return null; }
+  } catch { return null; }
 };
 
 export default function ProductCard({ product, isSelected, onCompare }: ProductCardProps) {
@@ -48,13 +49,15 @@ export default function ProductCard({ product, isSelected, onCompare }: ProductC
 
   // --- LOGIC CARI HARGA TERMURAH DARI E-COMMERCE ---
   // Ambil semua link, urutkan dari harga terendah
-  const sortedLinks = product.marketplace_links?.sort((a, b) => a.harga - b.harga) || [];
+  const sortedLinks = [...(product.marketplace_links || [])].sort((a, b) => a.harga - b.harga);
   const cheapestLink = sortedLinks.length > 0 ? sortedLinks[0] : null;
 
   // Tentukan Harga Display (Prioritas: E-commerce -> Harga Baru Manual -> Harga Bekas)
   const displayPrice = cheapestLink ? cheapestLink.harga : (product.harga_terendah_baru || 0);
   const displayLabel = cheapestLink ? `via ${cheapestLink.nama_marketplace || "Toko Online"}` : "Harga Pasar Baru";
   const hasEcommerce = !!cheapestLink;
+  const priceSyncAt = product.price_last_updated_at || product.updated_at;
+  const priceFreshness = product.price_data_status || "unknown";
 
   return (
     <Link href={`/produk/${product.slug}`} className="group h-full block cursor-pointer">
@@ -67,10 +70,10 @@ export default function ProductCard({ product, isSelected, onCompare }: ProductC
         <div className="relative h-48 bg-white flex items-center justify-center overflow-hidden p-6 border-b border-slate-50">
           
           {/* BADGE UPDATE (Posisi: Pojok Kanan Atas - Lebih Rapi) */}
-          {product.updated_at && (
+          {priceSyncAt && (
              <div className="absolute top-3 right-3 z-20 flex items-center gap-1 bg-white/80 backdrop-blur border border-slate-200 shadow-sm px-2 py-1 rounded-full text-[10px] font-bold text-slate-500">
-                <Clock className="w-3 h-3 text-green-600" />
-                {timeAgo(product.updated_at)}
+                <Clock className={`w-3 h-3 ${priceFreshness === "stale" ? "text-amber-600" : "text-green-600"}`} />
+                {timeAgo(priceSyncAt)}
              </div>
           )}
 
@@ -142,6 +145,22 @@ export default function ProductCard({ product, isSelected, onCompare }: ProductC
                         <span className="text-[10px] text-slate-400 font-medium">Data pasar manual</span>
                     )}
                 </div>
+
+                {hasEcommerce ? (
+                  <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-slate-500">
+                    {priceFreshness === "stale" ? (
+                      <>
+                        <AlertTriangle className="h-3 w-3 text-amber-600" />
+                        Harga perlu cek ulang
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="h-3 w-3 text-emerald-600" />
+                        Harga relatif fresh
+                      </>
+                    )}
+                  </div>
+                ) : null}
             </div>
           </div>
         </CardContent>

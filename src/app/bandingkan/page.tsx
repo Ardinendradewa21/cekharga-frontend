@@ -20,15 +20,16 @@ const formatRupiah = (num?: number) => {
 const getImageUrl = (path: string | null | undefined): string | null => {
   if (!path) return null;
   if (typeof path === 'string' && (path.startsWith("http") || path.startsWith("https"))) return path;
+  const cleanPath = path?.startsWith('/') ? path.substring(1) : path;
+  if (cleanPath?.startsWith("uploads/")) return `/${cleanPath}`;
   
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
   
   try {
     const urlObj = new URL(apiUrl);
     const baseUrl = urlObj.origin; 
-    const cleanPath = path?.startsWith('/') ? path.substring(1) : path;
     return `${baseUrl}/storage/${cleanPath}`;
-  } catch (e) {
+  } catch {
     return `http://127.0.0.1:8000/storage/${path}`;
   }
 };
@@ -55,7 +56,7 @@ const renderVarian = (data: unknown) => {
       } else {
          items = data.split(',').map(s => s.trim());
       }
-    } catch (e) {
+    } catch {
       items = [data]; 
     }
   }
@@ -79,7 +80,7 @@ const cleanArrayString = (val: unknown): string => {
     try {
       const parsed = JSON.parse(val);
       if (Array.isArray(parsed)) return parsed.join(", ");
-    } catch (e) {
+    } catch {
       return val.replace(/[\[\]"]/g, '').replace(/,/g, ', ');
     }
   }
@@ -111,14 +112,13 @@ function ComparisonContent() {
       }
 
       setLoading(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       try {
         const [res1, res2] = await Promise.all([
-          slug1 ? fetch(`${apiUrl}/products/${slug1}`).then(r => r.json()) : Promise.resolve(null),
-          slug2 ? fetch(`${apiUrl}/products/${slug2}`).then(r => r.json()) : Promise.resolve(null)
+          slug1 ? fetch(`/api/products/${slug1}`).then(r => r.json()) : Promise.resolve(null),
+          slug2 ? fetch(`/api/products/${slug2}`).then(r => r.json()) : Promise.resolve(null)
         ]);
-        if (res1?.status === 'success') setHp1(res1.data);
-        if (res2?.status === 'success') setHp2(res2.data);
+        if (res1?.success || res1?.status === 'success') setHp1(res1.data);
+        if (res2?.success || res2?.status === 'success') setHp2(res2.data);
       } catch (error) {
         console.error("Error fetching comparison data:", error);
       } finally {
