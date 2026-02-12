@@ -2,6 +2,9 @@ import { jsonError, jsonSuccess } from "@/server/api/response";
 import { applyRateLimit } from "@/server/api/rate-limit";
 import { listBrands } from "@/server/repositories/product-repository";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const rateLimit = applyRateLimit(request, "api-brands-list", {

@@ -4,21 +4,10 @@ import { ProductStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/seo";
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const products = await prisma.product.findMany({
-    where: {
-      status: ProductStatus.aktif,
-    },
-    select: {
-      slug: true,
-      updated_at: true,
-    },
-    orderBy: {
-      updated_at: "desc",
-    },
-    take: 5000,
-  });
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: absoluteUrl("/"),
@@ -34,12 +23,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  const productPages: MetadataRoute.Sitemap = products.map((product) => ({
-    url: absoluteUrl(`/produk/${product.slug}`),
-    lastModified: product.updated_at ?? new Date(),
-    changeFrequency: "daily",
-    priority: 0.7,
-  }));
+  try {
+    const products = await prisma.product.findMany({
+      where: {
+        status: ProductStatus.aktif,
+      },
+      select: {
+        slug: true,
+        updated_at: true,
+      },
+      orderBy: {
+        updated_at: "desc",
+      },
+      take: 5000,
+    });
 
-  return [...staticPages, ...productPages];
+    const productPages: MetadataRoute.Sitemap = products.map((product) => ({
+      url: absoluteUrl(`/produk/${product.slug}`),
+      lastModified: product.updated_at ?? new Date(),
+      changeFrequency: "daily",
+      priority: 0.7,
+    }));
+
+    return [...staticPages, ...productPages];
+  } catch (error) {
+    console.error("Failed to load products for sitemap:", error);
+    return staticPages;
+  }
 }

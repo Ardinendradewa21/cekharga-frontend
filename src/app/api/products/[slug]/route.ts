@@ -2,6 +2,9 @@ import { jsonError, jsonSuccess } from "@/server/api/response";
 import { applyRateLimit } from "@/server/api/rate-limit";
 import { getProductBySlug } from "@/server/repositories/product-repository";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 type RouteContext = {
   params: Promise<{ slug: string }>;
 };

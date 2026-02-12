@@ -2,6 +2,8 @@ import { jsonError, jsonSuccess } from "@/server/api/response";
 import { upsertScrapedProduct } from "@/server/repositories/product-repository";
 import { scraperIngestSchema } from "@/server/validation/product";
 
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   try {
     const payload = await request.json();

@@ -3,6 +3,9 @@ import { applyRateLimit } from "@/server/api/rate-limit";
 import { listProducts, upsertScrapedProduct } from "@/server/repositories/product-repository";
 import { scraperIngestSchema } from "@/server/validation/product";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function parseNumber(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);
