@@ -3,12 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id                BigInt    @id @default(autoincrement())
   name              String    @db.VarChar(255)
   email             String    @unique(map: "users_email_unique") @db.VarChar(255)
   email_verified_at DateTime? @db.Timestamp(0)
@@ -21,7 +21,7 @@ model User {
 }
 
 model Brand {
-  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id         BigInt    @id @default(autoincrement())
   nama_brand String    @db.VarChar(255)
   slug       String    @unique(map: "brands_slug_unique") @db.VarChar(255)
   logo       String?   @db.VarChar(255)
@@ -33,7 +33,7 @@ model Brand {
 }
 
 model Marketplace {
-  id         BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  id         BigInt            @id @default(autoincrement())
   nama       String            @db.VarChar(255)
   slug       String            @db.VarChar(255)
   logo       String?           @db.VarChar(255)
@@ -47,12 +47,12 @@ model Marketplace {
 }
 
 model Product {
-  id                   BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  id                   BigInt            @id @default(autoincrement())
   nama_produk          String            @db.VarChar(255)
   slug                 String            @unique(map: "produk_slug_unique") @db.VarChar(255)
   foto                 String?           @db.VarChar(255)
-  id_brand             BigInt            @default(1) @db.UnsignedBigInt
-  tahun_rilis          Int?              @db.Year
+  id_brand             BigInt            @default(1)
+  tahun_rilis          Int?
   harga_terendah_baru  Decimal?          @db.Decimal(15, 2)
   harga_terendah_bekas Decimal?          @db.Decimal(15, 2)
   status               ProductStatus     @default(aktif)
@@ -71,8 +71,8 @@ model Product {
 }
 
 model Specification {
-  id                   BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  id_produk            BigInt    @db.UnsignedBigInt
+  id                   BigInt    @id @default(autoincrement())
+  id_produk            BigInt
   teknologi_jaringan   String?   @db.VarChar(255)
   tanggal_rilis        DateTime? @db.Date
   dimensi              String?   @db.VarChar(255)
@@ -102,9 +102,9 @@ model Specification {
   skor_antutu          Int?
   skor_geekbench       Int?
   skor_dxomark         Int?
-  bintang_performa     Int       @default(0) @db.TinyInt
-  bintang_kamera       Int       @default(0) @db.TinyInt
-  bintang_baterai      Int       @default(0) @db.TinyInt
+  bintang_performa     Int       @default(0)
+  bintang_kamera       Int       @default(0)
+  bintang_baterai      Int       @default(0)
   kesimpulan_singkat   String?   @db.VarChar(255)
   created_at           DateTime? @db.Timestamp(0)
   updated_at           DateTime? @db.Timestamp(0)
@@ -114,7 +114,7 @@ model Specification {
   comms_bluetooth      String?   @db.VarChar(255)
   comms_gps            String?   @db.VarChar(255)
   comms_usb            String?   @db.VarChar(255)
-  product              Product   @relation(fields: [id_produk], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "spesifikasi_produk_id_produk_foreign")
+  product              Product   @relation(fields: [id_produk], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([id_produk], map: "spesifikasi_produk_id_produk_foreign")
   @@index([rating_ip], map: "spesifikasi_produk_rating_ip_index")
@@ -128,9 +128,9 @@ model Specification {
 }
 
 model MarketplaceLink {
-  id               BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
-  produk_id        BigInt       @db.UnsignedBigInt
-  marketplace_id   BigInt?      @db.UnsignedBigInt
+  id               BigInt       @id @default(autoincrement())
+  produk_id        BigInt
+  marketplace_id   BigInt?
   nama_marketplace String       @db.VarChar(255)
   nama_toko        String?      @db.VarChar(255)
   harga            Decimal      @db.Decimal(15, 2)
@@ -139,8 +139,8 @@ model MarketplaceLink {
   status_aktif     Boolean      @default(true)
   created_at       DateTime?    @db.Timestamp(0)
   updated_at       DateTime?    @db.Timestamp(0)
-  marketplace      Marketplace? @relation(fields: [marketplace_id], references: [id], onUpdate: NoAction, map: "marketplace_links_marketplace_id_foreign")
-  product          Product      @relation(fields: [produk_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "marketplace_links_produk_id_foreign")
+  marketplace      Marketplace? @relation(fields: [marketplace_id], references: [id], onUpdate: NoAction)
+  product          Product      @relation(fields: [produk_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([produk_id], map: "marketplace_links_produk_id_foreign")
   @@index([marketplace_id], map: "marketplace_links_marketplace_id_foreign")
@@ -148,8 +148,8 @@ model MarketplaceLink {
 }
 
 model Review {
-  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  produk_id       BigInt    @db.UnsignedBigInt
+  id              BigInt    @id @default(autoincrement())
+  produk_id       BigInt
   reviewer_name   String    @db.VarChar(255)
   platform        String    @db.VarChar(50)
   video_url       String    @db.Text

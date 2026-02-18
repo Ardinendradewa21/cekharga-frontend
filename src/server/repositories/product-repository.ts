@@ -286,7 +286,7 @@ async function resolveMarketplaceIdForLink(
 
   const existing = await tx.marketplace.findFirst({
     where: {
-      OR: [{ slug: normalizedSlug }, { nama: normalizedName }],
+      OR: [{ slug: normalizedSlug }, { nama: { equals: normalizedName, mode: "insensitive" } }],
     },
     select: { id: true },
   });
@@ -393,7 +393,7 @@ async function resolveBrandId(input: ScraperIngestInput): Promise<number> {
     const normalizedSlug = createSlug(input.brand_name);
     const existingByName = await prisma.brand.findFirst({
       where: {
-        OR: [{ slug: normalizedSlug }, { nama_brand: input.brand_name }],
+        OR: [{ slug: normalizedSlug }, { nama_brand: { equals: input.brand_name, mode: "insensitive" } }],
       },
       select: { id: true },
     });
@@ -513,7 +513,7 @@ export async function listProducts(query: ProductListQuery): Promise<ProductList
 
   if (normalizedSearch) {
     whereAnd.push({
-      nama_produk: { contains: normalizedSearch },
+      nama_produk: { contains: normalizedSearch, mode: "insensitive" },
     });
   }
 
