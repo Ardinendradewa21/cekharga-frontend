@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")  // Ini baca yang prisma+postgres://
+  directUrl = env("DIRECT_URL")    // Ini baca yang postgres:// biasa
 }
 
 model User {
