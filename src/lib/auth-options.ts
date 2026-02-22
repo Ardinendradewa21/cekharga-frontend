@@ -12,10 +12,13 @@ const credentialsSchema = z.object({
 });
 
 export const authOptions: NextAuthOptions = {
+  // Secret wajib konsisten agar cookie session JWT bisa didekripsi.
+  secret: process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: "/admin/login",
   },
   session: {
+    // Session disimpan di JWT supaya cocok untuk App Router tanpa session table tambahan.
     strategy: "jwt",
   },
   providers: [
@@ -26,9 +29,11 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        // 1) Validasi input login.
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
+        // 2) Ambil user dari DB berdasarkan email.
         const dbUser = await prisma.user.findUnique({
           where: {
             email: parsed.data.email,
@@ -37,10 +42,12 @@ export const authOptions: NextAuthOptions = {
 
         if (!dbUser?.password) return null;
 
+        // Kompatibilitas hash lama dari Laravel bcrypt ($2y$ -> $2b$).
         const normalizedHash = dbUser.password.startsWith("$2y$")
           ? `$2b$${dbUser.password.slice(4)}`
           : dbUser.password;
 
+        // 3) Validasi password + pastikan email user termasuk admin allowlist.
         const isValidPassword = await bcrypt.compare(parsed.data.password, normalizedHash);
         if (!isValidPassword) return null;
         if (!isAdminEmail(dbUser.email)) return null;
@@ -61,7 +68,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role ?? "admin";
       }
 
-      // Backward compatibility for old cookies that don't carry `role` yet.
+      // Kompatibilitas cookie lama yang belum punya field `role`.
       if (!token.role) {
         token.role = isAdminEmail(typeof token.email === "string" ? token.email : null) ? "admin" : "guest";
       }

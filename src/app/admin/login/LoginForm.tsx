@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,6 +19,7 @@ export function LoginForm() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const callbackUrl = searchParams.get("callbackUrl") || "/admin";
+  const isJustRegistered = searchParams.get("registered") === "1";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,6 +50,12 @@ export function LoginForm() {
         <h1 className="text-xl font-bold text-slate-900">Login Admin</h1>
         <p className="text-sm text-slate-500">Masuk untuk mengelola produk CekHarga.</p>
       </div>
+
+      {isJustRegistered ? (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          Registrasi berhasil. Silakan login dengan akun yang baru dibuat.
+        </p>
+      ) : null}
 
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
@@ -82,7 +90,13 @@ export function LoginForm() {
       <Button type="submit" disabled={isSubmitting} className="w-full">
         {isSubmitting ? "Memproses..." : "Masuk"}
       </Button>
+
+      <p className="text-center text-sm text-slate-500">
+        Belum punya akun admin?{" "}
+        <Link href="/admin/register" className="font-medium text-blue-600 hover:underline">
+          Daftar di sini
+        </Link>
+      </p>
     </form>
   );
 }
-

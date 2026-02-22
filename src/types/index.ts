@@ -84,6 +84,7 @@ export interface Produk {
   tahun_rilis: string;
   harga_terendah_baru: number;
   harga_terendah_bekas: number;
+  views?: number;
   
   // Relasi ke spesifikasi (Optional karena di list produk mungkin tidak di-load)
   spesifikasi?: Spesifikasi;

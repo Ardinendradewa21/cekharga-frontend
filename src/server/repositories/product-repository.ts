@@ -5,6 +5,8 @@ import { normalizeForJson } from "@/server/db/normalize";
 import { createSlug } from "@/server/utils/slug";
 import { type ProductMutationInput, type ScraperIngestInput } from "@/server/validation/product";
 
+// Include relasi standar untuk hampir semua query produk,
+// supaya data yang dikirim ke UI sudah lengkap (brand, link marketplace, spesifikasi, review).
 const productInclude = {
   brand: true,
   marketplace_links: {
@@ -100,6 +102,7 @@ function mapSpecification(specRaw: Record<string, unknown> | null) {
 }
 
 function mapProductRecord(record: ProductRecord) {
+  // Semua data Prisma dinormalisasi dulu supaya aman saat di-serialize ke JSON.
   const row = normalizeForJson(record) as Record<string, unknown>;
   const specifications = (row.spesifikasi_produk as Record<string, unknown>[] | undefined) ?? [];
   const newestSpecification = specifications.length > 0 ? mapSpecification(specifications[0] ?? null) : null;
@@ -129,6 +132,9 @@ function mapProductRecord(record: ProductRecord) {
     harga_terendah_baru: toNumber(row.harga_terendah_baru) ?? 0,
     harga_terendah_bekas: toNumber(row.harga_terendah_bekas) ?? 0,
     status: (row.status as string) ?? "aktif",
+    // Kompatibilitas dua generasi field view:
+    // prioritas `views` (baru), fallback `jumlah_dilihat` (lama).
+    views: toNumber(row.views) ?? toNumber(row.jumlah_dilihat) ?? 0,
     jumlah_dilihat: toNumber(row.jumlah_dilihat) ?? 0,
     created_at: (row.created_at as string | null) ?? null,
     updated_at: (row.updated_at as string | null) ?? null,
@@ -267,6 +273,7 @@ async function resolveMarketplaceIdForLink(
   link: ProductMutationInput["marketplace_links"][number],
   now: Date,
 ): Promise<bigint | null> {
+  // Nama marketplace dinormalisasi ke slug agar tidak membuat duplikasi data.
   const normalizedName = link.nama_marketplace.trim();
   const normalizedSlug = createSlug(normalizedName);
 
@@ -323,6 +330,8 @@ async function resolveMarketplaceIdForLink(
 async function syncProductRelations(tx: Prisma.TransactionClient, productId: bigint, input: ProductMutationInput) {
   const now = new Date();
 
+  // Strategi sederhana: hapus relasi lama lalu isi ulang dari form terbaru.
+  // Ini menjaga hasil sinkron dengan input editor.
   await tx.marketplaceLink.deleteMany({ where: { produk_id: productId } });
   await tx.specification.deleteMany({ where: { id_produk: productId } });
   await tx.review.deleteMany({ where: { produk_id: productId } });
@@ -501,6 +510,7 @@ export async function listProducts(query: ProductListQuery): Promise<ProductList
 
   const whereAnd: Prisma.ProductWhereInput[] = [];
 
+  // Kumpulkan filter satu per satu, lalu digabung jadi AND agar query fleksibel.
   if (query.status && query.status !== "all") {
     whereAnd.push({
       status: query.status as ProductStatus,
@@ -591,6 +601,7 @@ export async function listProducts(query: ProductListQuery): Promise<ProductList
 
   const where: Prisma.ProductWhereInput = whereAnd.length > 0 ? { AND: whereAnd } : {};
 
+  // Sort antutu perlu sorting manual di memory karena nilai berasal dari relasi spesifikasi.
   if (query.sort === "antutu") {
     const products = await prisma.product.findMany({
       where,
@@ -690,6 +701,8 @@ export async function createProduct(input: ProductMutationInput) {
         harga_terendah_baru: input.harga_terendah_baru ?? null,
         harga_terendah_bekas: input.harga_terendah_bekas ?? null,
         status: input.status as ProductStatus,
+        // Simpan ke field baru + lama agar dashboard lama/baru tetap konsisten.
+        views: input.jumlah_dilihat ?? 0,
         jumlah_dilihat: BigInt(input.jumlah_dilihat ?? 0),
         created_at: now,
         updated_at: now,
@@ -728,6 +741,8 @@ export async function updateProduct(productId: number, input: ProductMutationInp
         harga_terendah_baru: input.harga_terendah_baru ?? null,
         harga_terendah_bekas: input.harga_terendah_bekas ?? null,
         status: input.status as ProductStatus,
+        // Sama seperti create: update kedua field view sekaligus.
+        views: input.jumlah_dilihat ?? 0,
         jumlah_dilihat: BigInt(input.jumlah_dilihat ?? 0),
         updated_at: now,
       },

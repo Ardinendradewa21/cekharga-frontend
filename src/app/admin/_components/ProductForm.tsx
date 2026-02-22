@@ -11,6 +11,7 @@ import { ProductFormAssistant } from "./ProductFormAssistant";
 import { ProductPreviewSheet } from "./ProductPreviewSheet";
 import { ReviewsEditor } from "./ReviewsEditor";
 
+// ID form dipakai lintas komponen (autofill, preview, assistant) agar bisa sinkron.
 const ADMIN_PRODUCT_FORM_ID = "admin-product-form";
 
 type BrandOption = {
@@ -56,6 +57,7 @@ export function ProductForm({
   initialData,
   action,
 }: ProductFormProps) {
+  // Normalisasi data awal (mode edit) agar field form aman dipakai sebagai defaultValue.
   const spec = (initialData?.spesifikasi as Record<string, unknown> | undefined) ?? {};
   const links = ((initialData?.marketplace_links as Record<string, unknown>[] | undefined) ?? []).map((link) => ({
     ...link,
@@ -71,12 +73,14 @@ export function ProductForm({
 
   return (
     <form id={ADMIN_PRODUCT_FORM_ID} action={action} className="space-y-6">
+      {/* Header ringkas: konteks halaman tambah/edit produk */}
       <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-sky-50 p-5">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
         <p className="mt-1 text-sm text-slate-600">{description}</p>
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Blok data inti produk */}
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-700">Data Produk</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <AutoSlugFields
@@ -147,6 +151,7 @@ export function ProductForm({
       <GsmArenaAutofill formId={ADMIN_PRODUCT_FORM_ID} />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Blok spesifikasi teknis (dipecah per field agar mudah dikontrol dari admin) */}
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-700">Spesifikasi Produk</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
@@ -321,18 +326,21 @@ export function ProductForm({
       <ProductFormAssistant formId={ADMIN_PRODUCT_FORM_ID} draftKey={draftKey} />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Input relasi marketplace dikirim sebagai JSON lewat komponen editor */}
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-700">Marketplace Links</h2>
         <p className="mb-4 text-xs text-slate-500">Isi setiap link marketplace satu per satu. Tidak perlu mengetik JSON.</p>
         <MarketplaceLinksEditor name="marketplace_links_json" initialLinks={links} marketplaceOptions={marketplaces} />
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Input relasi review video juga dikelola sebagai JSON lewat editor */}
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-700">Reviews</h2>
         <p className="mb-4 text-xs text-slate-500">Tambahkan video review untuk mendukung konten produk.</p>
         <ReviewsEditor name="reviews_json" initialReviews={reviews} />
       </section>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        {/* Preview membantu admin cek ringkasan sebelum submit */}
         <ProductPreviewSheet formId={ADMIN_PRODUCT_FORM_ID} brands={brands} />
         <Button type="submit">{submitLabel}</Button>
       </div>

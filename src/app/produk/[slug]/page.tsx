@@ -87,6 +87,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 }
 
 // --- HELPERS ---
+// Format angka ke mata uang Rupiah untuk harga produk.
 const formatRupiah = (num?: number): string => {
   if (!num) return "-";
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
@@ -134,6 +135,7 @@ const renderVarian = (data: unknown) => {
 };
 
 // Helper Gambar
+// Mendukung URL penuh, path local /uploads, atau path storage backend API.
 const getImageUrl = (path: string | null | undefined): string | null => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
@@ -148,6 +150,7 @@ const getImageUrl = (path: string | null | undefined): string | null => {
 
 // 🔥 HELPER PARSE VIDEO URL (YOUTUBE & TIKTOK)
 const getVideoEmbed = (url: string, platform: string) => {
+    // Fungsi ini mengubah URL video mentah ke format embed iframe.
     if (!url) return null;
 
     // 1. Logic YouTube (Regex Canggih)
@@ -193,6 +196,7 @@ export default async function ProductDetailPage(props: Props) {
   const priceSyncAt = product.price_last_updated_at || product.updated_at;
   const isPriceStale = product.price_data_status === "stale";
   const imagePath = getImageUrl(product.foto);
+  // Structured data supaya search engine lebih mudah memahami detail produk.
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",

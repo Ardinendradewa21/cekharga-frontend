@@ -1,17 +1,20 @@
 import { createSlug } from "@/server/utils/slug";
 import { productMutationSchema, type ProductMutationInput } from "@/server/validation/product";
 
+// Ambil nilai dari FormData dalam bentuk string yang sudah di-trim.
 function getFormValue(formData: FormData, key: string): string {
   const value = formData.get(key);
   if (typeof value !== "string") return "";
   return value.trim();
 }
 
+// Konversi field teks opsional: "" -> null.
 function getOptionalText(formData: FormData, key: string): string | null {
   const value = getFormValue(formData, key);
   return value.length > 0 ? value : null;
 }
 
+// Konversi angka opsional: nilai tidak valid -> null.
 function getOptionalNumber(formData: FormData, key: string): number | null {
   const value = getFormValue(formData, key);
   if (!value) return null;
@@ -19,17 +22,21 @@ function getOptionalNumber(formData: FormData, key: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// Khusus integer (contoh: skor, tahun, id).
 function getOptionalInteger(formData: FormData, key: string): number | null {
   const parsed = getOptionalNumber(formData, key);
   if (parsed === null) return null;
   return Number.isInteger(parsed) ? parsed : Math.trunc(parsed);
 }
 
+// Parsing checkbox/switch dari form HTML.
 function getBoolean(formData: FormData, key: string): boolean {
   const value = getFormValue(formData, key).toLowerCase();
   return value === "on" || value === "1" || value === "true" || value === "yes";
 }
 
+// Editor marketplace/review mengirim JSON string.
+// Helper ini memastikan bentuknya array valid.
 function parseJsonArray<T>(raw: string, key: string): T[] {
   if (!raw.trim()) return [];
 
@@ -49,6 +56,8 @@ export function parseProductFormData(formData: FormData): ProductMutationInput {
   const providedSlug = getFormValue(formData, "slug");
   const idBrand = getOptionalInteger(formData, "id_brand");
 
+  // Satukan semua field form menjadi satu object payload.
+  // Bagian ini sengaja eksplisit supaya mapping DB mudah ditelusuri.
   const rawPayload = {
     nama_produk: namaProduk,
     slug: createSlug(providedSlug || namaProduk),
@@ -105,6 +114,7 @@ export function parseProductFormData(formData: FormData): ProductMutationInput {
     reviews: parseJsonArray(getFormValue(formData, "reviews_json"), "reviews_json"),
   };
 
+  // Validasi akhir dengan schema terpusat agar server action menerima data bersih.
   const parsed = productMutationSchema.safeParse(rawPayload);
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Input produk tidak valid.");

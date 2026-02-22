@@ -1,11 +1,11 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")  // Ini baca yang prisma+postgres://
-  directUrl = env("DIRECT_URL")    // Ini baca yang postgres:// biasa
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
 }
 
 model User {
@@ -57,6 +57,7 @@ model Product {
   harga_terendah_baru  Decimal?          @db.Decimal(15, 2)
   harga_terendah_bekas Decimal?          @db.Decimal(15, 2)
   status               ProductStatus     @default(aktif)
+  views                Int               @default(0)
   jumlah_dilihat       BigInt            @default(0)
   created_at           DateTime?         @db.Timestamp(0)
   updated_at           DateTime?         @db.Timestamp(0)

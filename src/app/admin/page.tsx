@@ -1,174 +1,329 @@
 import Link from "next/link";
+import { Prisma, ProductStatus } from "@prisma/client";
+import { Activity, Eye, type LucideIcon, Package, Tags } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { deleteProductAction } from "@/server/actions/product-actions";
-import { listBrands, listProducts } from "@/server/repositories/product-repository";
+import { Card } from "@/components/ui/card";
+import { prisma } from "@/lib/prisma";
 
-import { FlashMessage } from "./_components/FlashMessage";
+type MetricCardProps = {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+};
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+function MetricCard({ label, value, icon: Icon }: MetricCardProps) {
+  return (
+    <Card className="border bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-zinc-500">{label}</p>
+          <p className="mt-2 text-2xl font-semibold text-zinc-900">{value}</p>
+        </div>
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700">
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </Card>
+  );
+}
 
-export default async function AdminPage({ searchParams }: { searchParams: SearchParams }) {
-  const params = await searchParams;
-  const q = typeof params.q === "string" ? params.q : "";
-  const selectedBrand = typeof params.brand === "string" ? params.brand : "";
-  const selectedStatus = typeof params.status === "string" ? params.status : "all";
-  const sort = typeof params.sort === "string" ? params.sort : "terbaru";
-  const type = typeof params.type === "string" ? params.type : undefined;
-  const message = typeof params.message === "string" ? params.message : undefined;
+function formatDate(date: Date | null) {
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
 
-  const [result, brands] = await Promise.all([
-    listProducts({
-      search: q || undefined,
-      brandSlugs: selectedBrand ? [selectedBrand] : undefined,
-      status: selectedStatus === "aktif" || selectedStatus === "draft" ? selectedStatus : "all",
-      page: 1,
-      limit: 100,
-      sort,
-      includeDraft: true,
-    }),
-    listBrands(),
-  ]);
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("id-ID").format(value);
+}
 
-  const formatRupiah = (value: number | null | undefined) => {
-    if (!value || value <= 0) return "-";
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
+function toCountNumber(value: number | bigint | null | undefined) {
+  // Prisma aggregate untuk kolom BigInt bisa balik bigint.
+  // Helper ini menyamakan semuanya jadi number untuk kebutuhan UI.
+  if (value === null || value === undefined) return 0;
+  return typeof value === "bigint" ? Number(value) : value;
+}
 
-  const findMarketplacePrice = (
-    links: Array<{ nama_marketplace?: string; harga?: number; status_aktif?: boolean }> | undefined,
-    marketplace: string,
-  ) => {
-    if (!links?.length) return null;
+function isUnknownViewsFieldError(error: unknown) {
+  return error instanceof Prisma.PrismaClientValidationError && error.message.includes("Unknown field `views`");
+}
 
-    const lowerName = marketplace.toLowerCase();
-    const prices = links
-      .filter((link) => link.status_aktif !== false)
-      .filter((link) => String(link.nama_marketplace ?? "").toLowerCase().includes(lowerName))
-      .map((link) => (typeof link.harga === "number" ? link.harga : null))
-      .filter((value): value is number => value !== null);
+type DashboardProductRow = {
+  id: string;
+  nama_produk: string;
+  brand_name: string | null;
+  views: number;
+  created_at: Date | null;
+};
 
-    if (prices.length === 0) return null;
-    return Math.min(...prices);
-  };
+type DashboardData = {
+  totalProducts: number;
+  totalBrands: number;
+  totalViews: number;
+  activeProducts: number;
+  topViewedProducts: DashboardProductRow[];
+  recentProducts: DashboardProductRow[];
+};
+
+async function loadDashboardData(): Promise<DashboardData> {
+  try {
+    // Jalur utama: pakai kolom `views` baru.
+    const [totalProducts, totalBrands, totalViewsAggregate, activeProducts, topViewedProductsRaw, recentProductsRaw] =
+      await Promise.all([
+        prisma.product.count(),
+        prisma.brand.count(),
+        prisma.product.aggregate({
+          _sum: {
+            views: true,
+          },
+        }),
+        prisma.product.count({
+          where: {
+            status: ProductStatus.aktif,
+          },
+        }),
+        prisma.product.findMany({
+          take: 5,
+          orderBy: [{ views: "desc" }, { created_at: "desc" }],
+          select: {
+            id: true,
+            nama_produk: true,
+            views: true,
+            created_at: true,
+            brand: {
+              select: {
+                nama_brand: true,
+              },
+            },
+          },
+        }),
+        prisma.product.findMany({
+          take: 5,
+          orderBy: [{ created_at: "desc" }, { id: "desc" }],
+          select: {
+            id: true,
+            nama_produk: true,
+            views: true,
+            created_at: true,
+            brand: {
+              select: {
+                nama_brand: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+    return {
+      totalProducts,
+      totalBrands,
+      totalViews: toCountNumber(totalViewsAggregate._sum.views),
+      activeProducts,
+      topViewedProducts: topViewedProductsRaw.map((product) => ({
+        id: String(product.id),
+        nama_produk: product.nama_produk,
+        brand_name: product.brand?.nama_brand ?? null,
+        views: toCountNumber(product.views),
+        created_at: product.created_at ?? null,
+      })),
+      recentProducts: recentProductsRaw.map((product) => ({
+        id: String(product.id),
+        nama_produk: product.nama_produk,
+        brand_name: product.brand?.nama_brand ?? null,
+        views: toCountNumber(product.views),
+        created_at: product.created_at ?? null,
+      })),
+    };
+  } catch (error) {
+    if (!isUnknownViewsFieldError(error)) {
+      throw error;
+    }
+
+    // Fallback: jika Prisma client lokal belum sinkron migrasi `views`,
+    // dashboard tetap jalan dengan kolom lama `jumlah_dilihat`.
+    const [totalProducts, totalBrands, totalViewsAggregate, activeProducts, topViewedProductsRaw, recentProductsRaw] =
+      await Promise.all([
+        prisma.product.count(),
+        prisma.brand.count(),
+        prisma.product.aggregate({
+          _sum: {
+            jumlah_dilihat: true,
+          },
+        }),
+        prisma.product.count({
+          where: {
+            status: ProductStatus.aktif,
+          },
+        }),
+        prisma.product.findMany({
+          take: 5,
+          orderBy: [{ jumlah_dilihat: "desc" }, { created_at: "desc" }],
+          select: {
+            id: true,
+            nama_produk: true,
+            jumlah_dilihat: true,
+            created_at: true,
+            brand: {
+              select: {
+                nama_brand: true,
+              },
+            },
+          },
+        }),
+        prisma.product.findMany({
+          take: 5,
+          orderBy: [{ created_at: "desc" }, { id: "desc" }],
+          select: {
+            id: true,
+            nama_produk: true,
+            jumlah_dilihat: true,
+            created_at: true,
+            brand: {
+              select: {
+                nama_brand: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+    return {
+      totalProducts,
+      totalBrands,
+      totalViews: toCountNumber(totalViewsAggregate._sum.jumlah_dilihat),
+      activeProducts,
+      topViewedProducts: topViewedProductsRaw.map((product) => ({
+        id: String(product.id),
+        nama_produk: product.nama_produk,
+        brand_name: product.brand?.nama_brand ?? null,
+        views: toCountNumber(product.jumlah_dilihat),
+        created_at: product.created_at ?? null,
+      })),
+      recentProducts: recentProductsRaw.map((product) => ({
+        id: String(product.id),
+        nama_produk: product.nama_produk,
+        brand_name: product.brand?.nama_brand ?? null,
+        views: toCountNumber(product.jumlah_dilihat),
+        created_at: product.created_at ?? null,
+      })),
+    };
+  }
+}
+
+export default async function AdminDashboardPage() {
+  const { totalProducts, totalBrands, totalViews, activeProducts, topViewedProducts, recentProducts } =
+    await loadDashboardData();
 
   return (
-    <div>
-      <FlashMessage type={type} message={message} />
-
-      <div className="mb-4 flex flex-col gap-3 rounded-xl border bg-white p-4 md:flex-row md:items-center md:justify-between">
-        <form method="GET" className="grid w-full gap-2 md:grid-cols-5">
-          <input
-            name="q"
-            defaultValue={q}
-            placeholder="Cari nama produk..."
-            className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
-          />
-          <select
-            name="brand"
-            defaultValue={selectedBrand}
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-          >
-            <option value="">Semua Brand</option>
-            {brands.map((brand) => (
-              <option key={brand.id} value={brand.slug}>
-                {brand.nama_brand}
-              </option>
-            ))}
-          </select>
-          <select
-            name="status"
-            defaultValue={selectedStatus}
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-          >
-            <option value="all">Semua Status</option>
-            <option value="aktif">aktif</option>
-            <option value="draft">draft</option>
-          </select>
-          <select
-            name="sort"
-            defaultValue={sort}
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-          >
-            <option value="terbaru">Terbaru</option>
-            <option value="brand_asc">Brand A-Z</option>
-            <option value="brand_desc">Brand Z-A</option>
-          </select>
-          <Button type="submit" variant="outline">
-            Terapkan
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 rounded-xl border bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-900">Dashboard Admin</h1>
+          <p className="mt-1 text-sm text-zinc-500">Pantau performa katalog dan aktivitas produk dalam satu tempat.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/admin/produk">Kelola Produk</Link>
           </Button>
-        </form>
-        <Link href="/admin/produk/baru">
-          <Button>Tambah Produk</Button>
-        </Link>
-      </div>
+          <Button asChild>
+            <Link href="/admin/produk/baru">Tambah Produk</Link>
+          </Button>
+        </div>
+      </section>
 
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
-            <tr>
-              <th className="px-4 py-3">Nama Produk</th>
-              <th className="px-4 py-3">Brand</th>
-              <th className="px-4 py-3">Harga Shopee</th>
-              <th className="px-4 py-3">Harga Tokopedia</th>
-              <th className="px-4 py-3">Harga Blibli</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.data.map((product) => {
-              const deleteAction = deleteProductAction.bind(null, product.id);
-              const brand = product.brand as { nama_brand?: string } | null;
-              const links =
-                (product.marketplace_links as Array<{
-                  nama_marketplace?: string;
-                  harga?: number;
-                  status_aktif?: boolean;
-                }> | undefined) ?? [];
-              const shopeePrice = findMarketplacePrice(links, "shopee");
-              const tokopediaPrice = findMarketplacePrice(links, "tokopedia");
-              const blibliPrice = findMarketplacePrice(links, "blibli");
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Total Produk" value={formatNumber(totalProducts)} icon={Package} />
+        <MetricCard label="Total Brand" value={formatNumber(totalBrands)} icon={Tags} />
+        <MetricCard label="Total Kunjungan Produk" value={formatNumber(totalViews)} icon={Eye} />
+        <MetricCard label="Produk Aktif" value={formatNumber(activeProducts)} icon={Activity} />
+      </section>
 
-              return (
-                <tr key={product.id} className="border-t">
-                  <td className="px-4 py-3 font-medium text-slate-900">{product.nama_produk}</td>
-                  <td className="px-4 py-3 text-slate-600">{brand?.nama_brand || "-"}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatRupiah(shopeePrice)}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatRupiah(tokopediaPrice)}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatRupiah(blibliPrice)}</td>
-                  <td className="px-4 py-3 text-slate-600">{product.status}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <Link href={`/admin/produk/${product.id}`}>
-                        <Button size="sm" variant="outline">
-                          Edit
-                        </Button>
-                      </Link>
-                      <form action={deleteAction}>
-                        <Button size="sm" variant="destructive">
-                          Hapus
-                        </Button>
-                      </form>
-                    </div>
-                  </td>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <Card className="border bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-zinc-900">Produk Paling Banyak Dilihat</h2>
+            <Button asChild variant="ghost" size="sm" className="text-zinc-600">
+              <Link href="/admin/produk">Lihat semua</Link>
+            </Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-zinc-500">
+                  <th className="px-2 py-2 font-medium">Produk</th>
+                  <th className="px-2 py-2 font-medium">Brand</th>
+                  <th className="px-2 py-2 text-right font-medium">Views</th>
                 </tr>
-              );
-            })}
-            {result.data.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                  Tidak ada data produk.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {topViewedProducts.map((product) => (
+                  <tr key={product.id} className="border-b last:border-none">
+                    <td className="px-2 py-3">
+                      <Link href={`/admin/produk/${product.id}`} className="font-medium text-zinc-900 hover:underline">
+                        {product.nama_produk}
+                      </Link>
+                    </td>
+                    <td className="px-2 py-3 text-zinc-600">{product.brand_name ?? "-"}</td>
+                    <td className="px-2 py-3 text-right font-medium text-zinc-800">{formatNumber(product.views)}</td>
+                  </tr>
+                ))}
+                {topViewedProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-2 py-8 text-center text-zinc-500">
+                      Belum ada data view produk.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card className="border bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-zinc-900">Produk Baru Ditambahkan</h2>
+            <Button asChild variant="ghost" size="sm" className="text-zinc-600">
+              <Link href="/admin/produk">Lihat semua</Link>
+            </Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-zinc-500">
+                  <th className="px-2 py-2 font-medium">Produk</th>
+                  <th className="px-2 py-2 font-medium">Tanggal</th>
+                  <th className="px-2 py-2 text-right font-medium">Views</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentProducts.map((product) => (
+                  <tr key={product.id} className="border-b last:border-none">
+                    <td className="px-2 py-3">
+                      <Link href={`/admin/produk/${product.id}`} className="font-medium text-zinc-900 hover:underline">
+                        {product.nama_produk}
+                      </Link>
+                      <p className="text-xs text-zinc-500">{product.brand_name ?? "-"}</p>
+                    </td>
+                    <td className="px-2 py-3 text-zinc-600">{formatDate(product.created_at)}</td>
+                    <td className="px-2 py-3 text-right font-medium text-zinc-800">{formatNumber(product.views)}</td>
+                  </tr>
+                ))}
+                {recentProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-2 py-8 text-center text-zinc-500">
+                      Belum ada produk terbaru.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }

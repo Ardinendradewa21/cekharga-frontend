@@ -7,9 +7,11 @@ export default withAuth(
     return undefined;
   },
   {
+    secret: process.env.NEXTAUTH_SECRET,
     callbacks: {
       authorized: ({ req, token }) => {
         if (req.nextUrl.pathname.startsWith("/admin/login")) return true;
+        if (req.nextUrl.pathname.startsWith("/admin/register")) return true;
         if (!token) return false;
 
         if (token.role === "admin") return true;
@@ -24,5 +26,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/admin", "/admin/((?!login).*)"],
+  matcher: ["/admin", "/admin/((?!login|register).*)"],
 };
