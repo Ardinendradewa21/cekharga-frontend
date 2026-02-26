@@ -69,6 +69,104 @@ type DashboardData = {
   recentProducts: DashboardProductRow[];
 };
 
+type DashboardRawCountRow = {
+  total: number | bigint;
+};
+
+type DashboardRawViewsRow = {
+  total_views: number | bigint;
+};
+
+type DashboardRawProductRow = {
+  id: number | bigint;
+  nama_produk: string;
+  brand_name: string | null;
+  views: number | bigint;
+  created_at: Date | null;
+};
+
+function isLegacyProdukTableNotFoundError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2021" &&
+    error.message.toLowerCase().includes("public.produk")
+  );
+}
+
+function mapRawDashboardProducts(rows: DashboardRawProductRow[]): DashboardProductRow[] {
+  return rows.map((product) => ({
+    id: String(product.id),
+    nama_produk: product.nama_produk,
+    brand_name: product.brand_name,
+    views: toCountNumber(product.views),
+    created_at: product.created_at ?? null,
+  }));
+}
+
+async function loadDashboardDataFromTableProductRaw(): Promise<DashboardData> {
+  // Fallback aman saat Prisma Client lama masih menunjuk ke tabel `produk`.
+  // Query ini langsung ke tabel aktual `table_product`.
+  const [
+    totalProductsRaw,
+    totalBrandsRaw,
+    totalViewsRaw,
+    activeProductsRaw,
+    topViewedProductsRaw,
+    recentProductsRaw,
+  ] = await Promise.all([
+    prisma.$queryRaw<DashboardRawCountRow[]>`
+      SELECT COUNT(*)::bigint AS total
+      FROM "public"."table_product"
+    `,
+    prisma.$queryRaw<DashboardRawCountRow[]>`
+      SELECT COUNT(*)::bigint AS total
+      FROM "public"."brands"
+    `,
+    prisma.$queryRaw<DashboardRawViewsRow[]>`
+      SELECT COALESCE(SUM("views"), 0)::bigint AS total_views
+      FROM "public"."table_product"
+    `,
+    prisma.$queryRaw<DashboardRawCountRow[]>`
+      SELECT COUNT(*)::bigint AS total
+      FROM "public"."table_product"
+      WHERE "status" = CAST('aktif' AS "public"."produk_status")
+    `,
+    prisma.$queryRaw<DashboardRawProductRow[]>`
+      SELECT
+        p."id",
+        p."nama_produk",
+        p."views"::bigint AS "views",
+        p."created_at",
+        b."nama_brand" AS "brand_name"
+      FROM "public"."table_product" p
+      LEFT JOIN "public"."brands" b ON b."id" = p."id_brand"
+      ORDER BY p."views" DESC, p."created_at" DESC NULLS LAST
+      LIMIT 5
+    `,
+    prisma.$queryRaw<DashboardRawProductRow[]>`
+      SELECT
+        p."id",
+        p."nama_produk",
+        p."views"::bigint AS "views",
+        p."created_at",
+        b."nama_brand" AS "brand_name"
+      FROM "public"."table_product" p
+      LEFT JOIN "public"."brands" b ON b."id" = p."id_brand"
+      ORDER BY p."created_at" DESC NULLS LAST, p."id" DESC
+      LIMIT 5
+    `,
+  ]);
+
+  return {
+    totalProducts: toCountNumber(totalProductsRaw[0]?.total),
+    totalBrands: toCountNumber(totalBrandsRaw[0]?.total),
+    totalViews: toCountNumber(totalViewsRaw[0]?.total_views),
+    activeProducts: toCountNumber(activeProductsRaw[0]?.total),
+    topViewedProducts: mapRawDashboardProducts(topViewedProductsRaw),
+    recentProducts: mapRawDashboardProducts(recentProductsRaw),
+  };
+}
+
 async function loadDashboardData(): Promise<DashboardData> {
   try {
     // Jalur utama: pakai kolom `views` baru.
@@ -139,6 +237,10 @@ async function loadDashboardData(): Promise<DashboardData> {
       })),
     };
   } catch (error) {
+    if (isLegacyProdukTableNotFoundError(error)) {
+      return loadDashboardDataFromTableProductRaw();
+    }
+
     if (!isUnknownViewsFieldError(error)) {
       throw error;
     }

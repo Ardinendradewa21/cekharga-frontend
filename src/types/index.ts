@@ -66,13 +66,41 @@ export interface Spesifikasi {
 export interface MarketplaceLink {
   id: number;
   nama_marketplace: string; // shopee, tokopedia, dll
-  nama_toko: string;
+  nama_toko: string | null;
   harga: number;
   url_produk: string;
   kondisi: 'baru' | 'bekas';
   status_aktif: boolean;
+  variant_id?: number | null;
+  variant_label?: string | null;
+  title_raw?: string | null;
+  seller_name?: string | null;
+  last_synced_at?: string | null;
+  marketplace_logo?: string | null;
   updated_at?: string;
   created_at?: string;
+  marketplace?: {
+    id?: number;
+    nama?: string;
+    logo?: string | null;
+    warna_hex?: string;
+    text_color?: string;
+  } | null;
+}
+
+export interface ProductVariant {
+  id: number;
+  product_id: number;
+  sku?: string | null;
+  ram_gb: number;
+  storage_gb: number;
+  warna?: string | null;
+  label: string;
+  is_default: boolean;
+  status_aktif: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+  prices: MarketplaceLink[];
 }
 
 export interface Produk {
@@ -101,6 +129,8 @@ export interface Produk {
   shopee_price?: number | null;
   tokopedia_price?: number | null;
   blibli_price?: number | null;
+  variants?: ProductVariant[];
+  default_variant_id?: number | null;
 
   reviews?: ProductReview[];
 

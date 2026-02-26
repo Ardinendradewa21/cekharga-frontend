@@ -70,6 +70,16 @@ export const reviewInputSchema = z.object({
   highlight_quote: optionalText,
 });
 
+export const marketplacePriceSyncInputSchema = z.object({
+  marketplace_id: z.number().int().positive().optional().nullable(),
+  marketplace_slug: optionalText,
+  title: z.string().trim().min(1),
+  seller_name: optionalText,
+  price: z.number().positive(),
+  affiliate_url: z.string().trim().url(),
+  payload: z.unknown().optional(),
+});
+
 export const productMutationSchema = z.object({
   nama_produk: z.string().trim().min(2).max(255),
   slug: z
@@ -105,6 +115,7 @@ export const scraperIngestSchema = z
     harga_terendah_bekas: z.number().nonnegative().optional().nullable(),
     spesifikasi: specificationInputSchema.optional(),
     marketplace_links: z.array(marketplaceLinkInputSchema).default([]),
+    marketplace_prices: z.array(marketplacePriceSyncInputSchema).default([]),
     reviews: z.array(reviewInputSchema).default([]),
   })
   .refine((value) => Boolean(value.id_brand || value.brand_slug || value.brand_name), {

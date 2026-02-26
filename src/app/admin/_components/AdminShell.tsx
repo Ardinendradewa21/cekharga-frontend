@@ -13,6 +13,8 @@ import {
   Package,
   PlusCircle,
   Smartphone,
+  Store,
+  Tags,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -32,29 +34,56 @@ type NavItem = {
   isActive: (pathname: string) => boolean;
 };
 
+type NavGroup = {
+  title: string;
+  items: NavItem[];
+};
+
 type BreadcrumbItem = {
   href: string;
   label: string;
 };
 
-const navItems: NavItem[] = [
+const navGroups: NavGroup[] = [
   {
-    href: "/admin",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    isActive: (pathname) => pathname === "/admin",
+    title: "Produk",
+    items: [
+      {
+        href: "/admin",
+        label: "Dashboard",
+        icon: LayoutDashboard,
+        isActive: (pathname) => pathname === "/admin",
+      },
+      {
+        href: "/admin/produk",
+        label: "Semua Produk",
+        icon: Package,
+        isActive: (pathname) => pathname.startsWith("/admin/produk") && !pathname.startsWith("/admin/produk/baru"),
+      },
+      {
+        href: "/admin/produk/baru",
+        label: "Tambah Produk",
+        icon: PlusCircle,
+        isActive: (pathname) => pathname.startsWith("/admin/produk/baru"),
+      },
+    ],
   },
   {
-    href: "/admin/produk",
-    label: "Semua Produk",
-    icon: Package,
-    isActive: (pathname) => pathname.startsWith("/admin/produk") && !pathname.startsWith("/admin/produk/baru"),
-  },
-  {
-    href: "/admin/produk/baru",
-    label: "Tambah Produk",
-    icon: PlusCircle,
-    isActive: (pathname) => pathname.startsWith("/admin/produk/baru"),
+    title: "Master Data",
+    items: [
+      {
+        href: "/admin/master-data/brands",
+        label: "Brands",
+        icon: Tags,
+        isActive: (pathname) => pathname.startsWith("/admin/master-data/brands"),
+      },
+      {
+        href: "/admin/master-data/marketplaces",
+        label: "Marketplaces",
+        icon: Store,
+        isActive: (pathname) => pathname.startsWith("/admin/master-data/marketplaces"),
+      },
+    ],
   },
 ];
 
@@ -71,6 +100,9 @@ function segmentToLabel(segment: string, previousSegment: string | null) {
   const dictionary: Record<string, string> = {
     produk: "Semua Produk",
     baru: "Tambah Produk",
+    "master-data": "Master Data",
+    brands: "Brands",
+    marketplaces: "Marketplaces",
     login: "Login Admin",
     register: "Registrasi Admin",
   };
@@ -155,24 +187,31 @@ export function AdminShell({ children, userName, userEmail }: AdminShellProps) {
           </Link>
         </div>
 
-        <nav className="space-y-1 px-3 py-4">
-          {navItems.map((item) => {
-            const active = item.isActive(pathname);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                  active ? "bg-indigo-50 font-medium text-indigo-700" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        <nav className="space-y-4 px-3 py-4">
+          {navGroups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <p className="px-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">{group.title}</p>
+              {group.items.map((item) => {
+                const active = item.isActive(pathname);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-indigo-50 font-medium text-indigo-700"
+                        : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="mt-auto border-t p-3">
@@ -203,27 +242,34 @@ export function AdminShell({ children, userName, userEmail }: AdminShellProps) {
                   <SheetHeader className="border-b px-4 py-4 text-left">
                     <SheetTitle className="text-base">CekHarga Admin</SheetTitle>
                   </SheetHeader>
-                  <nav className="space-y-1 px-3 py-4">
-                    {navItems.map((item) => {
-                      const active = item.isActive(pathname);
-                      const Icon = item.icon;
-                      return (
-                        <SheetClose asChild key={item.href}>
-                          <Link
-                            href={item.href}
-                            className={cn(
-                              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                              active
-                                ? "bg-indigo-50 font-medium text-indigo-700"
-                                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-                            )}
-                          >
-                            <Icon className="h-4 w-4" />
-                            <span>{item.label}</span>
-                          </Link>
-                        </SheetClose>
-                      );
-                    })}
+                  <nav className="space-y-4 px-3 py-4">
+                    {navGroups.map((group) => (
+                      <div key={group.title} className="space-y-1">
+                        <p className="px-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                          {group.title}
+                        </p>
+                        {group.items.map((item) => {
+                          const active = item.isActive(pathname);
+                          const Icon = item.icon;
+                          return (
+                            <SheetClose asChild key={item.href}>
+                              <Link
+                                href={item.href}
+                                className={cn(
+                                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                  active
+                                    ? "bg-indigo-50 font-medium text-indigo-700"
+                                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                                )}
+                              >
+                                <Icon className="h-4 w-4" />
+                                <span>{item.label}</span>
+                              </Link>
+                            </SheetClose>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </nav>
                   <div className="mt-auto border-t p-3">
                     <button

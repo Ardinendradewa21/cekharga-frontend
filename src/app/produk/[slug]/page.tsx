@@ -3,23 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Produk, MarketplaceLink } from "@/types";
-import { ArrowLeft, Camera, Cpu, Smartphone, Check, X, Share2, Scale, Monitor, ShoppingBag, ExternalLink, RefreshCw, PlayCircle, MessageSquareQuote } from "lucide-react"; 
+import { Produk, ProductVariant } from "@/types";
+import { ArrowLeft, Camera, Cpu, Smartphone, Check, X, Share2, Scale, Monitor, ShoppingBag, RefreshCw, PlayCircle, MessageSquareQuote } from "lucide-react"; 
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getProductBySlug } from "@/server/repositories/product-repository";
 import { SITE_NAME, absoluteUrl } from "@/lib/seo";
-
-// --- 0. DEFINISI TIPE LOKAL ---
-interface ExtendedMarketplaceLink extends MarketplaceLink {
-  marketplace?: {
-    nama?: string;
-    logo?: string;
-    warna_hex?: string;
-    text_color?: string;
-  };
-}
+import { VariantPriceSwitcher } from "./VariantPriceSwitcher";
 
 // --- 1. FUNGSI AMBIL DATA ---
 async function getProductDetail(slug: string) {
@@ -33,6 +24,7 @@ async function getProductDetail(slug: string) {
 
 type Props = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export async function generateMetadata(props: Props): Promise<Metadata> {
@@ -173,26 +165,23 @@ const getVideoEmbed = (url: string, platform: string) => {
     return null;
 };
 
-const getMarketplaceConfigFallback = (name: string) => {
-  const n = name.toLowerCase();
-  if (n.includes('shopee')) return { classColor: "bg-[#EE4D2D]", logo: "https://upload.wikimedia.org/wikipedia/commons/f/fe/Shopee.svg", label: "Shopee" };
-  if (n.includes('tokopedia')) return { classColor: "bg-[#03AC0E]", logo: "https://assets.tokopedia.net/assets-tokopedia-lite/v2/zeus/kratos/6055eb99.png", label: "Tokopedia" };
-  if (n.includes('blibli')) return { classColor: "bg-[#0095DA]", logo: "https://upload.wikimedia.org/wikipedia/commons/0/07/Blibli_logo.svg", label: "Blibli" };
-  if (n.includes('lazada')) return { classColor: "bg-[#0f146d]", logo: "https://upload.wikimedia.org/wikipedia/commons/4/4d/Lazada_Logo.svg", label: "Lazada" };
-  return { classColor: "bg-slate-900", logo: null, label: name };
-};
-
 // --- KOMPONEN UTAMA ---
 export default async function ProductDetailPage(props: Props) {
   const params = await props.params;
+  const searchParams = await props.searchParams;
   const slug = params.slug;
+  const rawVariantParam = searchParams.variant;
+  const variantParam = Array.isArray(rawVariantParam) ? rawVariantParam[0] : rawVariantParam;
+  const parsedVariantId = variantParam ? Number(variantParam) : null;
+  const initialVariantId =
+    parsedVariantId !== null && Number.isFinite(parsedVariantId) && parsedVariantId > 0 ? parsedVariantId : null;
 
   if (!slug) return notFound();
   const product = await getProductDetail(slug);
   if (!product) return notFound();
   
+  const variants = (product.variants ?? []) as ProductVariant[];
   const sortedLinks = [...(product.marketplace_links || [])].sort((a, b) => a.harga - b.harga);
-  const lowestPriceLink = sortedLinks.length > 0 ? sortedLinks[0] : null;
   const priceSyncAt = product.price_last_updated_at || product.updated_at;
   const isPriceStale = product.price_data_status === "stale";
   const imagePath = getImageUrl(product.foto);
@@ -301,46 +290,16 @@ export default async function ProductDetailPage(props: Props) {
                 </div>
               ) : null}
               
-              <div className="space-y-3">
-                {sortedLinks.length > 0 ? (
-                    sortedLinks.map((linkData) => {
-                      const link = linkData as ExtendedMarketplaceLink;
-                      const mpFromDB = link.marketplace;
-                      const fallbackConfig = getMarketplaceConfigFallback(link.nama_marketplace);
-                      const mpName = mpFromDB?.nama || link.nama_marketplace || fallbackConfig.label;
-                      const mpLogo = mpFromDB?.logo ? getImageUrl(mpFromDB.logo) : fallbackConfig.logo;
-                      const hasDbColor = !!mpFromDB?.warna_hex;
-                      const finalStyle = hasDbColor ? { backgroundColor: mpFromDB?.warna_hex } : {};
-                      const finalClass = hasDbColor ? "" : fallbackConfig.classColor;
-                      const textColor = mpFromDB?.text_color || "#ffffff";
-
-                      return (
-                        <a key={link.id} href={link.url_produk} target="_blank" rel="noreferrer" className="group block">
-                          <div className={`relative overflow-hidden flex items-center justify-between p-3.5 rounded-xl border border-transparent transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${finalClass}`} style={finalStyle}>
-                             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10 blur-xl"></div>
-                             <div className="flex items-center gap-3 z-10 w-full relative">
-                                <div className="bg-white p-1.5 rounded-lg shrink-0 w-10 h-10 flex items-center justify-center shadow-sm overflow-hidden">
-                                   {mpLogo ? <Image src={mpLogo} alt={mpName} width={40} height={40} className="object-contain w-full h-full" unoptimized /> : <ExternalLink className="w-5 h-5 text-slate-400" />}
-                                </div>
-                                <div className="flex flex-col flex-1 min-w-0" style={{ color: textColor }}>
-                                   <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-lg font-black tracking-tight whitespace-nowrap">{formatRupiah(link.harga)}</span>
-                                      {link.id === lowestPriceLink?.id && <span className="bg-white/90 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap">Termurah</span>}
-                                   </div>
-                                   <span className="text-[11px] font-medium opacity-90 truncate w-full block flex items-center gap-1">{link.nama_toko || mpName} • {link.kondisi}</span>
-                                </div>
-                                <div className="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm whitespace-nowrap group-hover:scale-105 transition-transform shrink-0">Beli</div>
-                             </div>
-                          </div>
-                        </a>
-                      );
-                    })
-                ) : (
-                    <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                      <p className="text-slate-500 text-sm">Belum ada link toko tersedia.</p>
-                    </div>
-                )}
-              </div>
+              <VariantPriceSwitcher
+                variants={variants.map((variant) => ({
+                  id: variant.id,
+                  label: variant.label,
+                  is_default: variant.is_default,
+                  prices: variant.prices,
+                }))}
+                fallbackLinks={sortedLinks}
+                initialVariantId={initialVariantId}
+              />
 
               <Separator className="my-5 bg-slate-100" />
               <div className="space-y-3">
@@ -532,3 +491,4 @@ const SpecRow = ({ label, value }: { label: string, value: unknown }) => (
       </span>
    </div>
 );
+

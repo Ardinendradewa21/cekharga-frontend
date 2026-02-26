@@ -131,15 +131,12 @@ export function ProductForm({
             </select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="jumlah_dilihat">Jumlah Dilihat</Label>
-            <Input
-              id="jumlah_dilihat"
-              name="jumlah_dilihat"
-              type="number"
-              defaultValue={valueOrEmpty(initialData?.jumlah_dilihat ?? 0)}
-            />
-          </div>
+          {/* Views tetap dipertahankan via hidden input agar nilai existing tidak ter-reset saat edit. */}
+          <input
+            type="hidden"
+            name="jumlah_dilihat"
+            defaultValue={valueOrEmpty(initialData?.jumlah_dilihat ?? initialData?.views ?? 0)}
+          />
 
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="foto">Foto Produk</Label>
