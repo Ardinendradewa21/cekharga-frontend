@@ -51,10 +51,70 @@ function parseJsonArray<T>(raw: string, key: string): T[] {
   }
 }
 
+type ParsedVariantPriceInput = {
+  marketplace_id?: number | null;
+  nama_marketplace?: string | null;
+  marketplace_logo?: string | null;
+  seller_name?: string | null;
+  price?: number | null;
+  affiliate_url?: string | null;
+  kondisi?: string | null;
+  status_aktif?: boolean | null;
+};
+
+type ParsedVariantInput = {
+  label?: string | null;
+  warna?: string | null;
+  sku?: string | null;
+  is_default?: boolean | null;
+  status_aktif?: boolean | null;
+  prices?: ParsedVariantPriceInput[] | null;
+};
+
+function flattenVariantPricesToMarketplaceLinks(variants: ParsedVariantInput[]) {
+  return variants.flatMap((variant) =>
+    (variant.prices ?? [])
+      .map((price) => {
+        const hasAnyValue = Boolean(
+          (price.nama_marketplace ?? "").trim() ||
+            (price.seller_name ?? "").trim() ||
+            price.price !== null ||
+            (price.affiliate_url ?? "").trim(),
+        );
+
+        if (!hasAnyValue) return null;
+
+        return {
+          marketplace_id: price.marketplace_id ?? null,
+          nama_marketplace: (price.nama_marketplace ?? "").trim(),
+          marketplace_logo: (price.marketplace_logo ?? "").trim() || null,
+          nama_toko: (price.seller_name ?? "").trim() || null,
+          harga: price.price ?? null,
+          url_produk: (price.affiliate_url ?? "").trim(),
+          kondisi: (price.kondisi ?? "baru").trim() || "baru",
+          status_aktif: Boolean(price.status_aktif ?? true),
+          // Simpan hint varian supaya legacy consumer tetap bisa dilacak ke label asalnya jika dibutuhkan.
+          variant_label: (variant.label ?? "").trim() || null,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null),
+  );
+}
+
 export function parseProductFormData(formData: FormData): ProductMutationInput {
   const namaProduk = getFormValue(formData, "nama_produk");
   const providedSlug = getFormValue(formData, "slug");
   const idBrand = getOptionalInteger(formData, "id_brand");
+  const parsedVariants = parseJsonArray<ParsedVariantInput>(getFormValue(formData, "variants_json"), "variants_json");
+  const legacyMarketplaceLinks = parseJsonArray(getFormValue(formData, "marketplace_links_json"), "marketplace_links_json");
+  const derivedMarketplaceLinks =
+    parsedVariants.length > 0 ? flattenVariantPricesToMarketplaceLinks(parsedVariants) : legacyMarketplaceLinks;
+  const derivedVariantInternal =
+    parsedVariants.length > 0
+      ? parsedVariants
+          .map((variant) => (variant.label ?? "").trim())
+          .filter((label) => label.length > 0)
+      : getOptionalText(formData, "varian_internal");
 
   // Satukan semua field form menjadi satu object payload.
   // Bagian ini sengaja eksplisit supaya mapping DB mudah ditelusuri.
@@ -82,7 +142,7 @@ export function parseProductFormData(formData: FormData): ProductMutationInput {
       os: getOptionalText(formData, "os"),
       chipset: getOptionalText(formData, "chipset"),
       ada_slot_memori: getBoolean(formData, "ada_slot_memori"),
-      varian_internal: getOptionalText(formData, "varian_internal"),
+      varian_internal: derivedVariantInternal,
       tipe_memori: getOptionalText(formData, "tipe_memori"),
       kamera_utama_mp: getOptionalInteger(formData, "kamera_utama_mp"),
       detail_kamera_utama: getOptionalText(formData, "detail_kamera_utama"),
@@ -110,7 +170,8 @@ export function parseProductFormData(formData: FormData): ProductMutationInput {
       comms_gps: getOptionalText(formData, "comms_gps"),
       comms_usb: getOptionalText(formData, "comms_usb"),
     },
-    marketplace_links: parseJsonArray(getFormValue(formData, "marketplace_links_json"), "marketplace_links_json"),
+    marketplace_links: derivedMarketplaceLinks,
+    variants: parsedVariants,
     reviews: parseJsonArray(getFormValue(formData, "reviews_json"), "reviews_json"),
   };
 

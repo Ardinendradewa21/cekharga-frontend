@@ -2,6 +2,7 @@ import { jsonError, jsonSuccess } from "@/server/api/response";
 import { applyRateLimit } from "@/server/api/rate-limit";
 import { listProducts, upsertScrapedProduct } from "@/server/repositories/product-repository";
 import { scraperIngestSchema } from "@/server/validation/product";
+import { parseQueryIntent } from "@/lib/query-intent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,21 +29,44 @@ export async function GET(request: Request) {
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
-    const useCaseValue = searchParams.get("use_case");
+
+    // --- INTENT PARSER ---
+    // Parse natural language query (e.g. "hp gaming murah buat main genshin 3 jutaan")
+    // menjadi structured filter. Explicit URL params selalu override hasil intent.
+    const rawSearch = searchParams.get("search") ?? "";
+    const intent = rawSearch ? parseQueryIntent(rawSearch) : null;
+
     const allowedUseCases = new Set(["gaming", "camera", "battery", "daily"]);
-    const useCase =
-      useCaseValue && allowedUseCases.has(useCaseValue)
-        ? (useCaseValue as "gaming" | "camera" | "battery" | "daily")
-        : undefined;
+    const useCaseParam = searchParams.get("use_case");
+    const useCase: "gaming" | "camera" | "battery" | "daily" | undefined =
+      useCaseParam && allowedUseCases.has(useCaseParam)
+        ? (useCaseParam as "gaming" | "camera" | "battery" | "daily")
+        : intent?.useCase;
+
+    const sortParam = searchParams.get("sort") ?? "terbaru";
+    // Gunakan intent sort hanya jika sort masih default "terbaru" (user belum pilih sort manual)
+    const sort =
+      sortParam === "terbaru" && intent?.sort ? intent.sort : sortParam;
+
+    const maxPriceParam = parseNumber(searchParams.get("max_price"));
+    // Gunakan maxPrice dari intent hanya jika tidak ada explicit max_price di URL
+    const maxPrice = maxPriceParam ?? intent?.maxPrice;
+
+    // Jika intent terdeteksi, kirimkan remainingQuery ke FTS supaya kata filler tidak mengganggu.
+    // Jika tidak ada intent, kirimkan rawSearch asli.
+    const searchForFts =
+      intent?.hasIntent
+        ? intent.remainingQuery || undefined
+        : rawSearch || undefined;
 
     const result = await listProducts({
-      search: searchParams.get("search") ?? undefined,
+      search: searchForFts,
       brandSlugs: brands,
       minPrice: parseNumber(searchParams.get("min_price")),
-      maxPrice: parseNumber(searchParams.get("max_price")),
-      hasNfc: searchParams.get("has_nfc") === "1",
+      maxPrice,
+      hasNfc: searchParams.get("has_nfc") === "1" || (intent?.hasNfc ?? false),
       useCase,
-      sort: searchParams.get("sort") ?? "terbaru",
+      sort,
       page: parseNumber(searchParams.get("page")) ?? 1,
       limit: 12,
     });

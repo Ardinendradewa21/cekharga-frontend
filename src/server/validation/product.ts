@@ -63,6 +63,26 @@ export const marketplaceLinkInputSchema = z.object({
   status_aktif: z.boolean().default(true),
 });
 
+export const variantMarketplacePriceInputSchema = z.object({
+  marketplace_id: z.number().int().positive().optional().nullable(),
+  nama_marketplace: z.string().trim().min(1).max(255),
+  marketplace_logo: optionalText,
+  seller_name: optionalText,
+  price: z.number().positive(),
+  affiliate_url: z.string().trim().url(),
+  kondisi: z.string().trim().min(1).max(255).default("baru"),
+  status_aktif: z.boolean().default(true),
+});
+
+export const productVariantInputSchema = z.object({
+  label: z.string().trim().min(1).max(100),
+  warna: optionalText,
+  sku: optionalText,
+  is_default: z.boolean().default(false),
+  status_aktif: z.boolean().default(true),
+  prices: z.array(variantMarketplacePriceInputSchema).default([]),
+});
+
 export const reviewInputSchema = z.object({
   reviewer_name: z.string().trim().min(1).max(255),
   platform: z.string().trim().min(1).max(50),
@@ -80,26 +100,51 @@ export const marketplacePriceSyncInputSchema = z.object({
   payload: z.unknown().optional(),
 });
 
-export const productMutationSchema = z.object({
-  nama_produk: z.string().trim().min(2).max(255),
-  slug: z
-    .string()
-    .trim()
-    .min(2)
-    .max(255)
-    .regex(/^[a-z0-9-]+$/, "Slug hanya boleh huruf kecil, angka, dan '-'"),
-  id_brand: z.number().int().positive(),
-  brand_logo: optionalText,
-  foto: optionalText,
-  tahun_rilis: z.number().int().min(1990).max(2100).optional().nullable(),
-  harga_terendah_baru: z.number().nonnegative().optional().nullable(),
-  harga_terendah_bekas: z.number().nonnegative().optional().nullable(),
-  status: z.enum(["aktif", "draft"]).default("aktif"),
-  jumlah_dilihat: z.number().int().nonnegative().default(0),
-  spesifikasi: specificationInputSchema.optional(),
-  marketplace_links: z.array(marketplaceLinkInputSchema).default([]),
-  reviews: z.array(reviewInputSchema).default([]),
-});
+export const productMutationSchema = z
+  .object({
+    nama_produk: z.string().trim().min(2).max(255),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(255)
+      .regex(/^[a-z0-9-]+$/, "Slug hanya boleh huruf kecil, angka, dan '-'"),
+    id_brand: z.number().int().positive(),
+    brand_logo: optionalText,
+    foto: optionalText,
+    tahun_rilis: z.number().int().min(1990).max(2100).optional().nullable(),
+    harga_terendah_baru: z.number().nonnegative().optional().nullable(),
+    harga_terendah_bekas: z.number().nonnegative().optional().nullable(),
+    status: z.enum(["aktif", "draft"]).default("aktif"),
+    jumlah_dilihat: z.number().int().nonnegative().default(0),
+    spesifikasi: specificationInputSchema.optional(),
+    marketplace_links: z.array(marketplaceLinkInputSchema).default([]),
+    variants: z.array(productVariantInputSchema).default([]),
+    reviews: z.array(reviewInputSchema).default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.variants.length === 0) return;
+
+    // Guard server-side: produk minimal harus punya satu varian aktif.
+    const activeVariants = value.variants.filter((variant) => variant.status_aktif);
+    if (activeVariants.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["variants"],
+        message: "Minimal harus ada 1 varian aktif.",
+      });
+    }
+
+    // Guard server-side kedua: dari seluruh varian aktif, minimal ada satu harga aktif.
+    const activePrices = activeVariants.flatMap((variant) => variant.prices.filter((price) => price.status_aktif));
+    if (activePrices.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["variants"],
+        message: "Minimal harus ada 1 harga marketplace aktif pada varian aktif.",
+      });
+    }
+  });
 
 export const scraperIngestSchema = z
   .object({

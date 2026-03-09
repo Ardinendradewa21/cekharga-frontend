@@ -6,9 +6,9 @@ import { AutoSlugFields } from "./AutoSlugFields";
 import { BrandSelectField } from "./BrandSelectField";
 import { GsmArenaAutofill } from "./GsmArenaAutofill";
 import { ImageUploadField } from "./ImageUploadField";
-import { MarketplaceLinksEditor } from "./MarketplaceLinksEditor";
 import { ProductFormAssistant } from "./ProductFormAssistant";
 import { ProductPreviewSheet } from "./ProductPreviewSheet";
+import { ProductVariantsEditor } from "./ProductVariantsEditor";
 import { ReviewsEditor } from "./ReviewsEditor";
 
 // ID form dipakai lintas komponen (autofill, preview, assistant) agar bisa sinkron.
@@ -59,13 +59,70 @@ export function ProductForm({
 }: ProductFormProps) {
   // Normalisasi data awal (mode edit) agar field form aman dipakai sebagai defaultValue.
   const spec = (initialData?.spesifikasi as Record<string, unknown> | undefined) ?? {};
-  const links = ((initialData?.marketplace_links as Record<string, unknown>[] | undefined) ?? []).map((link) => ({
-    ...link,
-    marketplace_logo:
-      (link.marketplace_logo as string | undefined) ??
-      ((link.marketplace as { logo?: string | null } | undefined)?.logo ?? ""),
+  const links: Record<string, unknown>[] = ((initialData?.marketplace_links as Record<string, unknown>[] | undefined) ?? []).map(
+    (link) => ({
+      ...link,
+      marketplace_logo:
+        (link.marketplace_logo as string | undefined) ??
+        ((link.marketplace as { logo?: string | null } | undefined)?.logo ?? ""),
+    }),
+  );
+  const variants = ((initialData?.variants as Record<string, unknown>[] | undefined) ?? []).map((variant, index) => ({
+    label: valueOrEmpty(variant.label),
+    warna: valueOrEmpty(variant.warna),
+    sku: valueOrEmpty(variant.sku),
+    is_default: Boolean(variant.is_default ?? index === 0),
+    status_aktif: Boolean(variant.status_aktif ?? true),
+    prices: ((variant.prices as Record<string, unknown>[] | undefined) ?? []).map((price) => ({
+      marketplace_id:
+        typeof price.marketplace_id === "number"
+          ? price.marketplace_id
+          : Number(price.marketplace_id ?? 0) > 0
+            ? Number(price.marketplace_id)
+            : null,
+      nama_marketplace: valueOrEmpty(price.nama_marketplace),
+      marketplace_logo:
+        valueOrEmpty(price.marketplace_logo) ||
+        valueOrEmpty((price.marketplace as { logo?: string | null } | undefined)?.logo),
+      seller_name: valueOrEmpty(price.seller_name ?? price.nama_toko),
+      price: valueOrEmpty(price.price ?? price.harga),
+      affiliate_url: valueOrEmpty(price.affiliate_url ?? price.url_produk),
+      kondisi: valueOrEmpty(price.kondisi || "baru"),
+      status_aktif: Boolean(price.status_aktif ?? true),
+    })),
   }));
   const reviews = (initialData?.reviews as Record<string, unknown>[] | undefined) ?? [];
+  const initialVariants =
+    variants.length > 0
+      ? variants
+      : links.length > 0
+        ? [
+            {
+              label: Array.isArray(spec.varian_internal)
+                ? valueOrEmpty(spec.varian_internal[0])
+                : valueOrEmpty(spec.varian_internal) || "Default",
+              warna: "",
+              sku: "",
+              is_default: true,
+              status_aktif: true,
+              prices: links.map((link) => ({
+                marketplace_id:
+                  typeof link.marketplace_id === "number"
+                    ? link.marketplace_id
+                    : Number(link.marketplace_id ?? 0) > 0
+                      ? Number(link.marketplace_id)
+                      : null,
+                nama_marketplace: valueOrEmpty(link.nama_marketplace),
+                marketplace_logo: valueOrEmpty(link.marketplace_logo),
+                seller_name: valueOrEmpty(link.nama_toko),
+                price: valueOrEmpty(link.harga),
+                affiliate_url: valueOrEmpty(link.url_produk),
+                kondisi: valueOrEmpty(link.kondisi || "baru"),
+                status_aktif: Boolean(link.status_aktif ?? true),
+              })),
+            },
+          ]
+        : [];
   const initialBrandId = Number(initialData?.id_brand ?? brands[0]?.id ?? 0);
   const initialBrandLogo = valueOrEmpty((initialData?.brand as { logo?: string | null } | undefined)?.logo ?? "");
   const draftKey = initialData?.id ? `admin-product-form:edit:${String(initialData.id)}` : "admin-product-form:new";
@@ -199,10 +256,6 @@ export function ProductForm({
             <Label htmlFor="tipe_memori">Tipe Memori</Label>
             <Input id="tipe_memori" name="tipe_memori" defaultValue={valueOrEmpty(spec.tipe_memori)} />
           </div>
-          <div className="space-y-2 md:col-span-3">
-            <Label htmlFor="varian_internal">Varian Internal</Label>
-            <Input id="varian_internal" name="varian_internal" defaultValue={valueOrEmpty(spec.varian_internal)} />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="kamera_utama_mp">Kamera Utama MP</Label>
             <Input id="kamera_utama_mp" name="kamera_utama_mp" type="number" defaultValue={valueOrEmpty(spec.kamera_utama_mp)} />
@@ -323,10 +376,18 @@ export function ProductForm({
       <ProductFormAssistant formId={ADMIN_PRODUCT_FORM_ID} draftKey={draftKey} />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        {/* Input relasi marketplace dikirim sebagai JSON lewat komponen editor */}
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-700">Marketplace Links</h2>
-        <p className="mb-4 text-xs text-slate-500">Isi setiap link marketplace satu per satu. Tidak perlu mengetik JSON.</p>
-        <MarketplaceLinksEditor name="marketplace_links_json" initialLinks={links} marketplaceOptions={marketplaces} />
+        {/* Varian menjadi source of truth harga marketplace agar admin tidak bingung lagi menghubungkan label varian dan harga */}
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-700">Varian & Harga Marketplace</h2>
+        <p className="mb-4 text-xs text-slate-500">
+          Tambahkan varian internal, lalu isi harga marketplace khusus untuk setiap varian. Ringkasan `varian_internal`
+          dan `marketplace_links` akan dibentuk otomatis di server untuk kompatibilitas data lama.
+        </p>
+        <ProductVariantsEditor
+          name="variants_json"
+          legacyLinksName="marketplace_links_json"
+          initialVariants={initialVariants}
+          marketplaceOptions={marketplaces}
+        />
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

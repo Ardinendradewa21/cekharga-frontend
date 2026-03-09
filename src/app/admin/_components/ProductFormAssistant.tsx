@@ -134,6 +134,60 @@ function validateForm(form: HTMLFormElement): string[] {
     marketplace_logo?: string | null;
   }>(getText("marketplace_links_json"));
 
+  const rawVariants = parseJsonArray<{
+    label?: string | null;
+    status_aktif?: boolean | null;
+    prices?: Array<{
+      nama_marketplace?: string | null;
+      price?: number | null;
+      affiliate_url?: string | null;
+      status_aktif?: boolean | null;
+    }> | null;
+  }>(getText("variants_json"));
+
+  rawVariants.forEach((variant, index) => {
+    const variantLabel = (variant.label ?? "").trim();
+    const prices = variant.prices ?? [];
+    const hasAnyValue = Boolean(variantLabel || prices.length > 0);
+    if (!hasAnyValue) return;
+
+    const row = index + 1;
+    if (!variantLabel) {
+      issues.push(`Varian #${row}: label varian wajib diisi.`);
+    } else if (!/\d+\s*\/\s*\d+/i.test(variantLabel)) {
+      issues.push(`Varian #${row}: gunakan format RAM/Storage seperti 8/256GB.`);
+    }
+
+    prices.forEach((price, priceIndex) => {
+      const priceRow = priceIndex + 1;
+      if (!(price.nama_marketplace ?? "").trim()) {
+        issues.push(`Varian #${row} harga #${priceRow}: marketplace wajib dipilih.`);
+      }
+      if (typeof price.price !== "number" || !Number.isFinite(price.price) || price.price <= 0) {
+        issues.push(`Varian #${row} harga #${priceRow}: harga harus angka > 0.`);
+      }
+      if (!price.affiliate_url || !isHttpUrl(price.affiliate_url)) {
+        issues.push(`Varian #${row} harga #${priceRow}: URL affiliate tidak valid.`);
+      }
+    });
+  });
+
+  const activeVariantCount = rawVariants.filter((variant) => Boolean(variant.status_aktif ?? true)).length;
+  const activePriceCount = rawVariants
+    .filter((variant) => Boolean(variant.status_aktif ?? true))
+    .flatMap((variant) => variant.prices ?? [])
+    .filter((price) => Boolean(price.status_aktif ?? true)).length;
+
+  // Guard ini menyamakan pesan realtime dengan guard server di schema Zod,
+  // jadi admin sudah tahu masalahnya sebelum submit menembak server action.
+  if (rawVariants.length > 0 && activeVariantCount === 0) {
+    issues.push("Minimal harus ada 1 varian aktif.");
+  }
+
+  if (rawVariants.length > 0 && activePriceCount === 0) {
+    issues.push("Minimal harus ada 1 harga marketplace aktif pada varian aktif.");
+  }
+
   rawLinks.forEach((link, index) => {
     const hasAnyValue = Boolean(
       (link.nama_marketplace ?? "").trim() ||

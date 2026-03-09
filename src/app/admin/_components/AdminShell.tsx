@@ -15,6 +15,7 @@ import {
   Smartphone,
   Store,
   Tags,
+  Upload,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,12 @@ const navGroups: NavGroup[] = [
         icon: PlusCircle,
         isActive: (pathname) => pathname.startsWith("/admin/produk/baru"),
       },
+      {
+        href: "/admin/import",
+        label: "Import CSV",
+        icon: Upload,
+        isActive: (pathname) => pathname.startsWith("/admin/import"),
+      },
     ],
   },
   {
@@ -103,6 +110,7 @@ function segmentToLabel(segment: string, previousSegment: string | null) {
     "master-data": "Master Data",
     brands: "Brands",
     marketplaces: "Marketplaces",
+    import: "Import CSV",
     login: "Login Admin",
     register: "Registrasi Admin",
   };

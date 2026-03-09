@@ -38,7 +38,8 @@ const productInclude = {
 } satisfies Prisma.ProductInclude;
 
 type ProductRecord = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
-type DbClient = Prisma.TransactionClient | typeof prisma;
+type TxClient = Prisma.TransactionClient;
+type DbClient = TxClient | typeof prisma;
 
 const truthyValues = new Set(["1", "true", "yes", "y", "ya", "ada", "support"]);
 const falsyValues = new Set(["0", "false", "no", "n", "tidak", "none", "null", ""]);
@@ -391,7 +392,7 @@ type MarketplaceReference = {
 };
 
 async function resolveMarketplaceReferenceForLink(
-  tx: Prisma.TransactionClient,
+  tx: TxClient,
   link: ProductMutationInput["marketplace_links"][number],
 ): Promise<MarketplaceReference> {
   const providedName = link.nama_marketplace.trim();
@@ -426,6 +427,16 @@ type VariantSeed = {
   storageGb: number;
   warna: string | null;
   label: string | null;
+  sku: string | null;
+  isDefault: boolean;
+  statusAktif: boolean;
+  prices: Array<{
+    marketplaceId: bigint | null;
+    sellerName: string | null;
+    price: number;
+    affiliateUrl: string;
+    statusAktif: boolean;
+  }>;
 };
 
 function pushVariantToken(raw: unknown, collector: string[]) {
@@ -468,6 +479,41 @@ function pushVariantToken(raw: unknown, collector: string[]) {
 }
 
 function buildVariantSeeds(input: ProductMutationInput): VariantSeed[] {
+  if (input.variants.length > 0) {
+    const explicitDefaultIndex = input.variants.findIndex((variant) => variant.is_default);
+
+    return input.variants.map((variant, index) => {
+      const rawLabel = variant.label.trim();
+      const extracted = extractRamRomFromTitle(rawLabel);
+
+      if (extracted.ramGb === null || extracted.storageGb === null) {
+        throw new Error(`Label varian "${rawLabel}" wajib memakai format RAM/Storage, contoh 8/256GB.`);
+      }
+
+      return {
+        ramGb: extracted.ramGb,
+        storageGb: extracted.storageGb,
+        warna: variant.warna ?? null,
+        label: formatVariantLabel({
+          ram_gb: extracted.ramGb,
+          storage_gb: extracted.storageGb,
+          warna: variant.warna ?? null,
+          label: rawLabel,
+        }),
+        sku: variant.sku ?? null,
+        isDefault: explicitDefaultIndex === -1 ? index === 0 : explicitDefaultIndex === index,
+        statusAktif: variant.status_aktif ?? true,
+        prices: variant.prices.map((price) => ({
+          marketplaceId: price.marketplace_id ? BigInt(price.marketplace_id) : null,
+          sellerName: price.seller_name ?? null,
+          price: price.price,
+          affiliateUrl: price.affiliate_url,
+          statusAktif: price.status_aktif ?? true,
+        })),
+      };
+    });
+  }
+
   const rawTokens: string[] = [];
   pushVariantToken(input.spesifikasi?.varian_internal, rawTokens);
 
@@ -492,16 +538,35 @@ function buildVariantSeeds(input: ProductMutationInput): VariantSeed[] {
       storageGb,
       warna: null,
       label: `${ramGb}/${storageGb}GB`,
+      sku: null,
+      isDefault: false,
+      statusAktif: true,
+      prices: [],
     };
 
     dedup.set(`${ramGb}-${storageGb}-`, seed);
   }
 
   if (dedup.size > 0) {
-    return Array.from(dedup.values()).sort((a, b) => {
+    const seeds = Array.from(dedup.values()).sort((a, b) => {
       if (a.ramGb !== b.ramGb) return a.ramGb - b.ramGb;
       return a.storageGb - b.storageGb;
     });
+
+    return seeds.map((seed, index) => ({
+      ...seed,
+      isDefault: index === 0,
+      prices:
+        index === 0
+          ? input.marketplace_links.map((link) => ({
+              marketplaceId: link.marketplace_id ? BigInt(link.marketplace_id) : null,
+              sellerName: link.nama_toko ?? null,
+              price: link.harga,
+              affiliateUrl: link.url_produk,
+              statusAktif: link.status_aktif ?? true,
+            }))
+          : [],
+    }));
   }
 
   return [
@@ -510,12 +575,22 @@ function buildVariantSeeds(input: ProductMutationInput): VariantSeed[] {
       storageGb: 0,
       warna: null,
       label: "Default",
+      sku: null,
+      isDefault: true,
+      statusAktif: true,
+      prices: input.marketplace_links.map((link) => ({
+        marketplaceId: link.marketplace_id ? BigInt(link.marketplace_id) : null,
+        sellerName: link.nama_toko ?? null,
+        price: link.harga,
+        affiliateUrl: link.url_produk,
+        statusAktif: link.status_aktif ?? true,
+      })),
     },
   ];
 }
 
 async function syncProductVariantsAndPrices(
-  tx: Prisma.TransactionClient,
+  tx: TxClient,
   productId: bigint,
   input: ProductMutationInput,
 ) {
@@ -523,7 +598,7 @@ async function syncProductVariantsAndPrices(
 
   // Source of truth untuk jalur form admin adalah payload terbaru dari form.
   // Karena itu relasi variant/price dibangun ulang agar sinkron dengan input saat ini.
-  await tx.productPrice.deleteMany({
+  await tx.marketplacePrice.deleteMany({
     where: {
       variant: {
         product_id: productId,
@@ -536,15 +611,15 @@ async function syncProductVariantsAndPrices(
   });
 
   const variantSeeds = buildVariantSeeds(input);
-  const createdVariants: Array<{ id: bigint; label: string; isDefault: boolean }> = [];
 
   for (let index = 0; index < variantSeeds.length; index += 1) {
     const seed = variantSeeds[index];
-    const isDefault = index === 0;
 
-    const created = await tx.productVariant.create({
+    // Nested write ini menjadikan varian sebagai parent langsung untuk semua harga marketplace terkait.
+    await tx.productVariant.create({
       data: {
         product_id: productId,
+        sku: seed.sku,
         ram_gb: seed.ramGb,
         storage_gb: seed.storageGb,
         warna: seed.warna,
@@ -554,10 +629,28 @@ async function syncProductVariantsAndPrices(
           warna: seed.warna,
           label: seed.label,
         }),
-        is_default: isDefault,
-        status_aktif: true,
+        is_default: seed.isDefault,
+        status_aktif: seed.statusAktif,
         created_at: now,
         updated_at: now,
+        ...(seed.prices.length > 0
+          ? {
+              prices: {
+                create: seed.prices.map((price) => ({
+                  marketplace_id: price.marketplaceId,
+                  title_raw: input.nama_produk,
+                  seller_name: price.sellerName,
+                  price: price.price,
+                  affiliate_url: price.affiliateUrl,
+                  currency: "IDR",
+                  is_active: price.statusAktif,
+                  last_synced_at: now,
+                  created_at: now,
+                  updated_at: now,
+                })),
+              },
+            }
+          : {}),
       },
       select: {
         id: true,
@@ -565,36 +658,9 @@ async function syncProductVariantsAndPrices(
         is_default: true,
       },
     });
-
-    createdVariants.push({
-      id: created.id,
-      label: created.label ?? "Default",
-      isDefault: created.is_default,
-    });
   }
 
-  const defaultVariant = createdVariants.find((variant) => variant.isDefault) ?? createdVariants[0];
-  if (!defaultVariant) return;
-
-  for (const link of input.marketplace_links) {
-    await tx.productPrice.create({
-      data: {
-        variant_id: defaultVariant.id,
-        marketplace_id: link.marketplace_id ? BigInt(link.marketplace_id) : null,
-        title_raw: input.nama_produk,
-        seller_name: link.nama_toko ?? null,
-        price: link.harga,
-        affiliate_url: link.url_produk,
-        currency: "IDR",
-        is_active: link.status_aktif ?? true,
-        last_synced_at: now,
-        created_at: now,
-        updated_at: now,
-      },
-    });
-  }
-
-  const lowestPrice = await tx.productPrice.findFirst({
+  const lowestPrice = await tx.marketplacePrice.findFirst({
     where: {
       variant: {
         product_id: productId,
@@ -614,7 +680,7 @@ async function syncProductVariantsAndPrices(
   });
 }
 
-async function syncProductRelations(tx: Prisma.TransactionClient, productId: bigint, input: ProductMutationInput) {
+async function syncProductRelations(tx: TxClient, productId: bigint, input: ProductMutationInput) {
   const now = new Date();
 
   // Strategi sederhana: hapus relasi lama lalu isi ulang dari form terbaru.
@@ -713,6 +779,103 @@ async function resolveBrandId(input: ScraperIngestInput): Promise<number> {
 
   throw new Error("Brand tidak ditemukan.");
 }
+
+// =============================================================================
+// FULL-TEXT SEARCH (FTS) HELPER
+// =============================================================================
+
+// Tipe hasil dari raw query FTS: hanya butuh id dan skor relevansi.
+type FtsMatch = { id: bigint; rank: number };
+
+/**
+ * Mencari produk menggunakan PostgreSQL Full-Text Search (FTS) dengan
+ * konfigurasi 'simple' dan ILIKE sebagai safety net.
+ *
+ * STRATEGI HYBRID (3 jalur yang digabung dengan OR):
+ *
+ *   Jalur 1 — FTS nama produk (CEPAT, pakai GIN index):
+ *     `to_tsvector('simple', nama_produk) @@ websearch_to_tsquery('simple', term)`
+ *     Contoh: "samsung galaxy a55" → token 'samsung' & 'galaxy' & 'a55', semua harus ada.
+ *     `websearch_to_tsquery` dipilih karena:
+ *       - Tidak crash untuk input sembarang (stopword, tanda baca, dll)
+ *       - Mendukung sintaks alami: "samsung OR xiaomi", "galaxy -note", dll
+ *
+ *   Jalur 2 — FTS nama brand (brands tabel kecil, cukup cepat):
+ *     Berguna jika produk bernama "Galaxy A55" tapi brand-nya "Samsung".
+ *     Tanpa jalur ini, pencarian "samsung" tidak akan menemukan produk tersebut.
+ *
+ *   Jalur 3 — ILIKE sebagai fallback (lambat tapi jaring pengaman):
+ *     Menangkap partial match yang FTS lewatkan.
+ *     Contoh: "samsu" tidak cocok di FTS (tidak ada token "samsu"),
+ *     tapi ILIKE '%samsu%' masih menemukan "Samsung Galaxy...".
+ *
+ * RANKING:
+ *   - `ts_rank_cd` menghasilkan skor 0.0–1.0 berdasarkan kepadatan token yang cocok.
+ *   - +1.0 ditambahkan agar FTS match selalu lebih tinggi dari ILIKE-only match (skor 0.0).
+ *   - Hasilnya diurutkan DESC sehingga produk paling relevan muncul duluan.
+ *
+ * LIMIT 500: Membatasi jumlah kandidat agar query Prisma berikutnya tidak terlalu berat.
+ *            Dalam praktiknya, pencarian yang terlalu broad sudah ditangani oleh UI
+ *            (minimum 2 karakter di search bar).
+ */
+async function runFtsSearch(term: string): Promise<FtsMatch[]> {
+  const trimmed = term.trim();
+  if (!trimmed) return [];
+
+  try {
+    const results = await prisma.$queryRaw<{ id: bigint; rank: number }[]>`
+      SELECT
+        p.id,
+        (
+          CASE
+            -- Hitung skor rank hanya jika FTS match (jalur 1).
+            -- ts_rank_cd = "cover density rank": mempertimbangkan proximity antar token.
+            WHEN to_tsvector('simple', p.nama_produk) @@ websearch_to_tsquery('simple', ${trimmed})
+            THEN ts_rank_cd(
+              to_tsvector('simple', p.nama_produk),
+              websearch_to_tsquery('simple', ${trimmed})
+            ) + 1.0
+            -- Jalur 2 & 3 (brand FTS + ILIKE) tidak mendapat bonus rank,
+            -- sehingga rank-nya 0.0. Mereka tetap masuk hasil tapi di urutan bawah.
+            ELSE 0.0
+          END
+        )::float8 AS rank
+      FROM table_product p
+      WHERE
+        p.status::text = 'aktif'
+        AND (
+          -- Jalur 1: FTS pada nama produk — cepat karena pakai GIN index
+          to_tsvector('simple', p.nama_produk) @@ websearch_to_tsquery('simple', ${trimmed})
+
+          OR
+
+          -- Jalur 2: FTS pada nama brand — menemukan produk via relasi brand
+          p.id_brand IN (
+            SELECT id FROM brands
+            WHERE to_tsvector('simple', nama_brand) @@ websearch_to_tsquery('simple', ${trimmed})
+          )
+
+          OR
+
+          -- Jalur 3: ILIKE sebagai jaring pengaman untuk partial/prefix typing
+          -- Parameterized ('%' || term || '%') → aman dari SQL injection
+          p.nama_produk ILIKE ${'%' + trimmed + '%'}
+        )
+      ORDER BY rank DESC, p.created_at DESC
+      LIMIT 500
+    `;
+
+    // Konversi rank ke number biasa (Prisma mengembalikan float8 sebagai number JS)
+    return results.map((r) => ({ id: r.id, rank: Number(r.rank) }));
+  } catch (error) {
+    // Jika FTS error (sangat jarang terjadi), log dan kembalikan array kosong.
+    // Caller akan fallback ke ILIKE biasa, sehingga search tidak pernah benar-benar mati.
+    console.error("[FTS] runFtsSearch error, akan fallback ke ILIKE:", error);
+    return [];
+  }
+}
+
+// =============================================================================
 
 export type ProductListQuery = {
   search?: string;
@@ -931,6 +1094,10 @@ export async function listProducts(query: ProductListQuery): Promise<ProductList
 
   const whereAnd: Prisma.ProductWhereInput[] = [];
 
+  // ftsRankMap menyimpan skor relevansi per product.id dari hasil FTS.
+  // Null berarti tidak ada pencarian aktif, atau FTS tidak digunakan.
+  let ftsRankMap: Map<number, number> | null = null;
+
   // Kumpulkan filter satu per satu, lalu digabung jadi AND agar query fleksibel.
   if (query.status && query.status !== "all") {
     whereAnd.push({
@@ -943,9 +1110,31 @@ export async function listProducts(query: ProductListQuery): Promise<ProductList
   }
 
   if (normalizedSearch) {
-    whereAnd.push({
-      nama_produk: { contains: normalizedSearch, mode: "insensitive" },
-    });
+    // Minimal 2 karakter agar FTS tidak terlalu broad dan tidak membebani GIN index.
+    // Query 1 karakter seperti "a" akan langsung ke ILIKE saja.
+    if (normalizedSearch.length >= 2) {
+      const ftsMatches = await runFtsSearch(normalizedSearch);
+
+      if (ftsMatches.length > 0) {
+        // FTS berhasil menemukan kandidat → gunakan ID-nya sebagai filter.
+        // Kombinasi ini tetap kompatibel dengan filter lain (brand, harga, use_case)
+        // karena semuanya di-AND-kan oleh Prisma whereAnd.
+        const matchedIds = ftsMatches.map((m) => m.id);
+        ftsRankMap = new Map(ftsMatches.map((m) => [Number(m.id), m.rank]));
+        whereAnd.push({ id: { in: matchedIds } });
+      } else {
+        // FTS tidak menemukan apapun (query terlalu spesifik / error).
+        // Fallback ke ILIKE biasa agar search tidak pernah return kosong tanpa alasan.
+        whereAnd.push({
+          nama_produk: { contains: normalizedSearch, mode: "insensitive" },
+        });
+      }
+    } else {
+      // Query terlalu pendek untuk FTS → langsung ILIKE
+      whereAnd.push({
+        nama_produk: { contains: normalizedSearch, mode: "insensitive" },
+      });
+    }
   }
 
   if (brandSlugs.length > 0) {
@@ -1060,6 +1249,16 @@ export async function listProducts(query: ProductListQuery): Promise<ProductList
     );
   } else if (query.sort === "antutu") {
     mapped.sort((a, b) => (b.spesifikasi?.skor_antutu ?? -1) - (a.spesifikasi?.skor_antutu ?? -1));
+  } else if (ftsRankMap) {
+    // Sort berdasarkan relevansi FTS saat user sedang mencari dan tidak memilih sort lain.
+    // Produk dengan skor rank tertinggi (paling relevan dengan query) muncul duluan.
+    // Tie-break: produk terbaru jika rank sama (misal dua produk sama-sama dari brand yang dicari).
+    mapped.sort((a, b) => {
+      const rankA = ftsRankMap!.get(a.id) ?? 0;
+      const rankB = ftsRankMap!.get(b.id) ?? 0;
+      if (rankB !== rankA) return rankB - rankA;
+      return b.id - a.id;
+    });
   } else {
     mapped.sort((a, b) => {
       const aTime = parseDateToMs(a.created_at) ?? 0;
@@ -1338,7 +1537,7 @@ export async function upsertProductPriceByTitle(input: ProductPriceSyncInput): P
   const now = new Date();
 
   const synced = await prisma.$transaction(async (tx) => {
-    const existing = await tx.productPrice.findFirst({
+    const existing = await tx.marketplacePrice.findFirst({
       where: {
         variant_id: targetVariantId,
         marketplace_id: marketplace?.id ?? null,
@@ -1348,7 +1547,7 @@ export async function upsertProductPriceByTitle(input: ProductPriceSyncInput): P
     });
 
     const priceRecord = existing
-      ? await tx.productPrice.update({
+      ? await tx.marketplacePrice.update({
           where: { id: existing.id },
           data: {
             title_raw: title,
@@ -1360,7 +1559,7 @@ export async function upsertProductPriceByTitle(input: ProductPriceSyncInput): P
           },
           select: { id: true },
         })
-      : await tx.productPrice.create({
+      : await tx.marketplacePrice.create({
           data: {
             variant_id: targetVariantId,
             marketplace_id: marketplace?.id ?? null,
@@ -1377,7 +1576,7 @@ export async function upsertProductPriceByTitle(input: ProductPriceSyncInput): P
           select: { id: true },
         });
 
-    const lowestPrice = await tx.productPrice.findFirst({
+    const lowestPrice = await tx.marketplacePrice.findFirst({
       where: {
         variant: {
           product_id: product.id,
@@ -1426,6 +1625,7 @@ export async function upsertScrapedProduct(input: ScraperIngestInput) {
     jumlah_dilihat: 0,
     spesifikasi: input.spesifikasi,
     marketplace_links: input.marketplace_links ?? [],
+    variants: [],
     reviews: input.reviews ?? [],
   };
 

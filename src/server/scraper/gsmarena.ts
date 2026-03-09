@@ -105,6 +105,25 @@ function extractModelName(html: string): string | null {
   return value || null;
 }
 
+function extractProductImageUrl(html: string): string | null {
+  // GSMArena main product photo biasanya ada di div.specs-photo-main atau link bigpic
+  const bigpicPatterns = [
+    // Format: <a href="...bigpic/..."><img src="..."></a>
+    /class="specs-photo-main"[^>]*>[\s\S]{0,200}?<img[^>]+src="(https?:\/\/[^"]+\.(jpg|png|webp))"/i,
+    // Fallback: URL langsung ke fdn2.gsmarena.com/vv/bigpic/
+    /src="(https?:\/\/fdn2\.gsmarena\.com\/vv\/bigpic\/[^"]+\.(jpg|png|webp))"/i,
+    // Fallback: URL ke cdn.gsmarena.com/vv/pics/
+    /src="(https?:\/\/(?:fdn|fdn2|cdn)\.gsmarena\.com\/vv\/(?:bigpic|pics)\/[^"]+\.(jpg|png|webp))"/i,
+  ];
+
+  for (const pattern of bigpicPatterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return null;
+}
+
 function parseMegaPixel(value: string | null): number | null {
   if (!value) return null;
   const match = value.match(/(\d+(?:\.\d+)?)\s*MP/i);
@@ -178,6 +197,7 @@ function extractIpRating(...values: Array<string | null>): string | null {
 export function parseGsmarenaHtml(html: string): ParsedGsmarenaResult {
   const dataSpecMap = buildDataSpecMap(html);
   const labelMap = buildLabelMap(html);
+  const productImageUrl = extractProductImageUrl(html);
 
   const modelName = extractModelName(html);
   const network = firstValue(dataSpecMap, labelMap, { specs: ["nettech"], labels: ["technology"] });
@@ -257,6 +277,9 @@ export function parseGsmarenaHtml(html: string): ParsedGsmarenaResult {
       comms_bluetooth: bluetooth,
       comms_gps: gps,
       comms_usb: usb,
+      // foto_gsmarena_url bukan field form biasa — hanya dipakai GsmArenaAutofill
+      // untuk auto-download foto. Tidak di-apply langsung ke hidden input `foto`.
+      foto_gsmarena_url: productImageUrl,
     },
   };
 }

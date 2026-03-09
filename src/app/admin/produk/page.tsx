@@ -5,6 +5,8 @@ import { deleteProductAction } from "@/server/actions/product-actions";
 import { listBrands, listProducts } from "@/server/repositories/product-repository";
 
 import { FlashMessage } from "../_components/FlashMessage";
+import { SyncAllPricesButton } from "../_components/SyncAllPricesButton";
+import { formatRupiah } from "@/lib/format";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -30,13 +32,33 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
     listBrands(),
   ]);
 
-  const formatRupiah = (value: number | null | undefined) => {
-    if (!value || value <= 0) return "-";
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(value);
+  const buildVariantSummaries = (
+    variants:
+      | Array<{
+          label?: string | null;
+          ram_gb?: number;
+          storage_gb?: number;
+          status_aktif?: boolean;
+        }>
+      | undefined,
+  ) => {
+    if (!variants?.length) return [];
+
+    // Ringkas label varian untuk tabel admin supaya parent product mudah dipindai
+    // tanpa harus membuka halaman edit satu per satu.
+    return variants
+      .filter((variant) => variant.status_aktif !== false)
+      .map((variant) => {
+        const label = variant.label?.trim();
+        if (label) return label;
+
+        if (typeof variant.ram_gb === "number" && typeof variant.storage_gb === "number") {
+          return `${variant.ram_gb}/${variant.storage_gb}GB`;
+        }
+
+        return null;
+      })
+      .filter((value): value is string => Boolean(value));
   };
 
   const findMarketplacePrice = (
@@ -102,9 +124,12 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
             Terapkan
           </Button>
         </form>
-        <Link href="/admin/produk/baru">
-          <Button>Tambah Produk</Button>
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <SyncAllPricesButton />
+          <Link href="/admin/produk/baru">
+            <Button>Tambah Produk</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
@@ -113,6 +138,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
             <tr>
               <th className="px-4 py-3">Nama Produk</th>
               <th className="px-4 py-3">Brand</th>
+              <th className="px-4 py-3">Varian</th>
               <th className="px-4 py-3">Harga Shopee</th>
               <th className="px-4 py-3">Harga Tokopedia</th>
               <th className="px-4 py-3">Harga Blibli</th>
@@ -133,11 +159,42 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
               const shopeePrice = findMarketplacePrice(links, "shopee");
               const tokopediaPrice = findMarketplacePrice(links, "tokopedia");
               const blibliPrice = findMarketplacePrice(links, "blibli");
+              const variantLabels = buildVariantSummaries(
+                (product.variants as Array<{
+                  label?: string | null;
+                  ram_gb?: number;
+                  storage_gb?: number;
+                  status_aktif?: boolean;
+                }> | undefined) ?? [],
+              );
+              const visibleVariantLabels = variantLabels.slice(0, 3);
+              const hiddenVariantCount = Math.max(0, variantLabels.length - visibleVariantLabels.length);
 
               return (
                 <tr key={product.id} className="border-t">
                   <td className="px-4 py-3 font-medium text-slate-900">{product.nama_produk}</td>
                   <td className="px-4 py-3 text-slate-600">{brand?.nama_brand || "-"}</td>
+                  <td className="px-4 py-3">
+                    {variantLabels.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {visibleVariantLabels.map((label) => (
+                          <span
+                            key={`${product.id}-${label}`}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700"
+                          >
+                            {label}
+                          </span>
+                        ))}
+                        {hiddenVariantCount > 0 ? (
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700">
+                            +{hiddenVariantCount} lagi
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">Belum ada varian</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{formatRupiah(shopeePrice)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatRupiah(tokopediaPrice)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatRupiah(blibliPrice)}</td>
@@ -161,7 +218,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
             })}
             {result.data.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
                   Tidak ada data produk.
                 </td>
               </tr>

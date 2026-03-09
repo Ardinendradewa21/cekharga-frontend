@@ -34,6 +34,20 @@ type PreviewReview = {
   highlight_quote: string | null;
 };
 
+type PreviewVariantPrice = {
+  nama_marketplace: string;
+  seller_name: string | null;
+  price: number | null;
+  affiliate_url: string;
+};
+
+type PreviewVariant = {
+  label: string;
+  warna: string | null;
+  sku: string | null;
+  prices: PreviewVariantPrice[];
+};
+
 type PreviewState = {
   namaProduk: string;
   slug: string;
@@ -50,6 +64,7 @@ type PreviewState = {
   kamera: string;
   isNfc: boolean;
   isJackAudio: boolean;
+  variants: PreviewVariant[];
   marketplaceLinks: PreviewMarketplaceLink[];
   reviews: PreviewReview[];
 };
@@ -110,6 +125,18 @@ function buildPreviewState(form: HTMLFormElement, brands: BrandOption[]): Previe
     url_produk?: string;
   }>(getText("marketplace_links_json"));
 
+  const rawVariants = safeParseJsonArray<{
+    label?: string | null;
+    warna?: string | null;
+    sku?: string | null;
+    prices?: Array<{
+      nama_marketplace?: string | null;
+      seller_name?: string | null;
+      price?: number | null;
+      affiliate_url?: string | null;
+    }> | null;
+  }>(getText("variants_json"));
+
   const rawReviews = safeParseJsonArray<{
     reviewer_name?: string;
     platform?: string;
@@ -137,6 +164,22 @@ function buildPreviewState(form: HTMLFormElement, brands: BrandOption[]): Previe
     }))
     .filter((item) => item.video_url.length > 0 || item.reviewer_name !== "-");
 
+  const variants: PreviewVariant[] = rawVariants
+    .map((variant) => ({
+      label: variant.label?.trim() || "-",
+      warna: variant.warna?.trim() || null,
+      sku: variant.sku?.trim() || null,
+      prices: (variant.prices ?? [])
+        .map((price) => ({
+          nama_marketplace: price.nama_marketplace?.trim() || "-",
+          seller_name: price.seller_name?.trim() || null,
+          price: toNumber(price.price),
+          affiliate_url: price.affiliate_url?.trim() || "",
+        }))
+        .filter((price) => price.affiliate_url.length > 0 || price.nama_marketplace !== "-"),
+    }))
+    .filter((variant) => variant.label !== "-" || variant.prices.length > 0);
+
   return {
     namaProduk: getText("nama_produk") || "-",
     slug: getText("slug") || "-",
@@ -153,6 +196,7 @@ function buildPreviewState(form: HTMLFormElement, brands: BrandOption[]): Previe
     kamera: [getText("kamera_utama_mp") ? `${getText("kamera_utama_mp")} MP` : "", getText("kamera_selfie_mp") ? `Selfie ${getText("kamera_selfie_mp")} MP` : ""].filter(Boolean).join(" | ") || "-",
     isNfc: toBoolean("ada_nfc"),
     isJackAudio: toBoolean("ada_jack_audio"),
+    variants,
     marketplaceLinks,
     reviews,
   };
@@ -218,6 +262,38 @@ export function ProductPreviewSheet({ formId, brands }: ProductPreviewSheetProps
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <h3 className="mb-3 text-sm font-semibold text-slate-800">Varian ({previewState?.variants.length ?? 0})</h3>
+            {previewState?.variants.length ? (
+              <div className="space-y-3">
+                {previewState.variants.map((variant, index) => (
+                  <div key={`${variant.label}-${index}`} className="rounded-md border border-slate-200 p-3 text-sm">
+                    <p className="font-semibold text-slate-900">{variant.label}</p>
+                    <p className="text-xs text-slate-500">
+                      {variant.warna || "-"} | SKU: {variant.sku || "-"}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {variant.prices.length > 0 ? (
+                        variant.prices.map((price, priceIndex) => (
+                          <div key={`${price.affiliate_url}-${priceIndex}`} className="rounded-md bg-slate-50 p-2">
+                            <p className="font-medium text-slate-800">{price.nama_marketplace}</p>
+                            <p className="text-slate-600">{price.seller_name || "-"}</p>
+                            <p className="text-slate-700">{toCurrency(price.price)}</p>
+                            <p className="truncate text-xs text-blue-600">{price.affiliate_url || "-"}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-slate-500">Belum ada harga marketplace.</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">Belum ada varian.</p>
+            )}
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4">
