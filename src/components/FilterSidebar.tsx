@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -21,7 +19,6 @@ export interface FilterState {
   min_price: string;
   max_price: string;
   use_case: string;
-  has_nfc: string;
 }
 
 interface FilterSidebarProps {
@@ -29,13 +26,21 @@ interface FilterSidebarProps {
   className?: string;
 }
 
+const PRICE_RANGE_OPTIONS = [
+  { value: "", label: "Semua Harga", min: "", max: "" },
+  { value: "under-2000000", label: "Di bawah Rp 2 juta", min: "", max: "2000000" },
+  { value: "2000000-3000000", label: "Rp 2 juta - Rp 3 juta", min: "2000000", max: "3000000" },
+  { value: "3000000-5000000", label: "Rp 3 juta - Rp 5 juta", min: "3000000", max: "5000000" },
+  { value: "5000000-7000000", label: "Rp 5 juta - Rp 7 juta", min: "5000000", max: "7000000" },
+  { value: "7000000-10000000", label: "Rp 7 juta - Rp 10 juta", min: "7000000", max: "10000000" },
+  { value: "above-10000000", label: "Di atas Rp 10 juta", min: "10000000", max: "" },
+] as const;
+
 export default function FilterSidebar({ onFilterChange, className }: FilterSidebarProps) {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
+  const [priceRange, setPriceRange] = useState("");
   const [useCase, setUseCase] = useState("");
-  const [hasNfc, setHasNfc] = useState(false);
 
   // 1. Ambil List Brand dari API
   useEffect(() => {
@@ -54,39 +59,40 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
       : [...selectedBrands, slug]; 
     
     setSelectedBrands(updated);
-    // Kirim perubahan langsung ke parent
-    applyFilter(updated, minPrice, maxPrice, useCase, hasNfc);
+    applyFilter(updated, priceRange, useCase);
   };
 
   // 3. Logic Reset
   const handleReset = () => {
     setSelectedBrands([]);
-    setMinPrice("");
-    setMaxPrice("");
+    setPriceRange("");
     setUseCase("");
-    setHasNfc(false);
-    applyFilter([], "", "", "", false);
+    applyFilter([], "", "");
   };
 
   // 4. Helper kirim data
   const applyFilter = (
     brands: string[],
-    min: string,
-    max: string,
+    rangeValue: string,
     useCaseValue: string,
-    hasNfcValue: boolean,
   ) => {
+    const selectedRange = PRICE_RANGE_OPTIONS.find((option) => option.value === rangeValue) ?? PRICE_RANGE_OPTIONS[0];
+
     onFilterChange({
       brands: brands.join(","),
-      min_price: min,
-      max_price: max,
+      min_price: selectedRange.min,
+      max_price: selectedRange.max,
       use_case: useCaseValue,
-      has_nfc: hasNfcValue ? "1" : "",
     });
   };
 
   return (
-    <div className={cn("bg-white rounded-xl border border-slate-200 p-5 shadow-sm h-fit sticky top-24", className)}>
+    <div
+      className={cn(
+        "h-fit rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
+        className,
+      )}
+    >
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-bold text-slate-800 flex items-center gap-2">
           <Filter className="w-4 h-4" /> Filter
@@ -102,30 +108,23 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
       {/* --- FILTER HARGA --- */}
       <div className="space-y-3">
         <Label className="text-xs font-bold text-slate-400 uppercase">Rentang Harga</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <Input 
-            placeholder="Min" 
-            className="text-xs" 
-            type="number"
-            value={minPrice}
-            onChange={(e) => setMinPrice(e.target.value)}
-          />
-          <Input 
-            placeholder="Max" 
-            className="text-xs" 
-            type="number"
-            value={maxPrice}
-            onChange={(e) => setMaxPrice(e.target.value)}
-          />
-        </div>
-        <Button 
-          size="sm" 
-          variant="secondary" 
-          className="w-full text-xs font-bold"
-          onClick={() => applyFilter(selectedBrands, minPrice, maxPrice, useCase, hasNfc)}
+        {/* Dropdown preset dipilih agar user tidak perlu mengetik angka manual
+            dan panel filter tetap pendek di desktop maupun mobile. */}
+        <select
+          value={priceRange}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setPriceRange(nextValue);
+            applyFilter(selectedBrands, nextValue, useCase);
+          }}
+          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
         >
-          Terapkan Harga
-        </Button>
+          {PRICE_RANGE_OPTIONS.map((option) => (
+            <option key={option.value || "all"} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <Separator className="my-6" />
@@ -138,7 +137,7 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
           onChange={(event) => {
             const nextValue = event.target.value;
             setUseCase(nextValue);
-            applyFilter(selectedBrands, minPrice, maxPrice, nextValue, hasNfc);
+            applyFilter(selectedBrands, priceRange, nextValue);
           }}
           className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
         >
@@ -148,21 +147,6 @@ export default function FilterSidebar({ onFilterChange, className }: FilterSideb
           <option value="battery">Baterai Awet (&gt;= 5000mAh)</option>
           <option value="daily">Harian Komplit (NFC + baterai besar)</option>
         </select>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="only-nfc"
-            checked={hasNfc}
-            onCheckedChange={(checked) => {
-              const nextValue = Boolean(checked);
-              setHasNfc(nextValue);
-              applyFilter(selectedBrands, minPrice, maxPrice, useCase, nextValue);
-            }}
-          />
-          <label htmlFor="only-nfc" className="text-sm text-slate-600">
-            Hanya tampilkan yang ada NFC
-          </label>
-        </div>
       </div>
 
       <Separator className="my-6" />

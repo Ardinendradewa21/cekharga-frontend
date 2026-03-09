@@ -8,13 +8,10 @@ import Link from "next/link";
 import { ArrowLeft, Smartphone, Battery, Camera, Cpu, Monitor, Repeat, Check, X as XIcon, Volume2, Wifi } from "lucide-react"; 
 import { Button } from "@/components/ui/button";
 import ComparisonSearch from "@/components/ComparisonSearch";
+import { formatPublicVariantLabel, formatVariantLabelFromNumbers } from "@/lib/variant-label";
+import { formatRupiah } from "@/lib/format";
 
 // --- HELPERS ---
-
-const formatRupiah = (num?: number) => {
-  if (!num) return "-";
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
-};
 
 // Logic Gambar Hybrid
 const getImageUrl = (path: string | null | undefined): string | null => {
@@ -73,6 +70,32 @@ const renderVarian = (data: unknown) => {
       ))}
     </div>
   );
+};
+
+const renderProductVariantBadges = (product: Produk | null | undefined) => {
+  const variantLabels =
+    product?.variants
+      ?.filter((variant) => variant.status_aktif !== false)
+      .map((variant) => {
+        const normalized = formatPublicVariantLabel(variant.label, {
+          isDefault: variant.is_default,
+          fallbackId: variant.id,
+        });
+        if (normalized) return normalized;
+        if (variant.ram_gb > 0 && variant.storage_gb > 0) {
+          return formatVariantLabelFromNumbers(variant.ram_gb, variant.storage_gb);
+        }
+        return null;
+      })
+      .filter((label): label is string => Boolean(label)) ?? [];
+
+  // Bandingkan sebaiknya pakai source of truth yang sama dengan homepage/detail.
+  // Fallback ke field spesifikasi lama tetap dipertahankan untuk data lama yang belum lengkap.
+  if (variantLabels.length > 0) {
+    return renderVarian(variantLabels);
+  }
+
+  return renderVarian(product?.spesifikasi?.varian_internal);
 };
 
 const cleanArrayString = (val: unknown): string => {
@@ -160,8 +183,8 @@ function ComparisonContent() {
 
     // LOGIC RENDER KONTEN
     if (type === 'variant') {
-        content1 = renderVarian(val1);
-        content2 = renderVarian(val2);
+        content1 = val1 as React.ReactNode;
+        content2 = val2 as React.ReactNode;
     } else if (type === 'boolean') {
         content1 = renderBoolean(val1 as boolean | undefined);
         content2 = renderBoolean(val2 as boolean | undefined);
@@ -202,8 +225,8 @@ function ComparisonContent() {
     <div className="min-h-screen bg-[#F8F9FA] pb-20 font-sans">
       
       {/* Navbar Clean */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="container mx-auto px-4 h-14 md:h-16 flex items-center gap-3">
+      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-md">
+        <div className="container mx-auto flex h-14 items-center gap-3 px-4 md:h-16">
           <Link href="/">
             <Button variant="ghost" size="icon" className="hover:bg-slate-100 rounded-full text-slate-600 h-8 w-8 md:h-10 md:w-10">
               <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
@@ -213,12 +236,12 @@ function ComparisonContent() {
         </div>
       </div>
 
-      <div className="container mx-auto px-2 md:px-4 py-4 md:py-8 max-w-5xl">
+      <div className="container mx-auto max-w-6xl px-2 py-3 md:px-4 md:py-8">
         
         {/* Header Produk (VS HEADER) */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6 mb-4 md:mb-8 items-start sticky top-14 bg-[#F8F9FA]/95 backdrop-blur-md py-2 md:static md:bg-transparent z-30">
+        <div className="sticky top-14 z-30 mb-4 grid grid-cols-2 items-start gap-2.5 bg-[#F8F9FA]/95 py-2 backdrop-blur-md md:static md:mb-8 md:grid-cols-3 md:gap-6 md:bg-transparent">
           
-          <div className="hidden md:block col-span-1 pt-10">
+          <div className="col-span-1 hidden pt-10 md:block">
             <h3 className="font-bold text-slate-400 text-xs uppercase tracking-widest">Device</h3>
           </div>
 
@@ -227,7 +250,7 @@ function ComparisonContent() {
             { data: hp2, setSearch: setIsSearching2, isSearch: isSearching2, pos: 2 }
           ].map((item, idx) => (
             <div key={idx} className="col-span-1 relative">
-              <div className="bg-white p-3 md:p-6 rounded-xl shadow-sm border border-slate-200 text-center relative h-full flex flex-col justify-between">
+              <div className="relative flex h-full flex-col justify-between rounded-[22px] border border-slate-200 bg-white p-2.5 text-center shadow-sm transition-shadow hover:shadow-md md:p-6 md:rounded-[28px]">
                 
                 {/* Tombol Ganti HP */}
                 <button 
@@ -247,7 +270,7 @@ function ComparisonContent() {
 
                 <div>
                     {/* Gambar (Hybrid Logic) */}
-                    <div className="h-24 md:h-40 relative mb-2 md:mb-4 flex items-center justify-center">
+                    <div className="relative mb-2 flex h-20 items-center justify-center md:mb-4 md:h-40">
                     {getImageUrl(item.data?.foto || null) ? (
                         <Image 
                             src={getImageUrl(item.data!.foto)!} 
@@ -265,17 +288,17 @@ function ComparisonContent() {
                     </div>
                     
                     {/* Nama HP */}
-                    <h2 className="font-bold text-slate-900 text-xs md:text-lg mb-2 leading-tight line-clamp-2 min-h-[2.5em] md:min-h-[1.5em] flex items-center justify-center">
+                    <h2 className="mb-2 flex min-h-[2.4rem] items-center justify-center text-[11px] font-bold leading-tight text-slate-900 line-clamp-2 md:min-h-[3.5rem] md:text-lg">
                     {item.data?.nama_produk || "-"}
                     </h2>
                 </div>
                 
                 {/* --- UPDATE: TAMPILAN HARGA (PRIORITAS HARGA BARU) --- */}
                 {item.data && (
-                  <div className="flex flex-col gap-1 items-center mt-auto">
+                  <div className="mt-auto flex min-h-[4.25rem] flex-col items-center gap-1">
                      {/* Harga Baru (Utama) */}
                      {item.data.harga_terendah_baru > 0 ? (
-                        <div className="text-blue-600 font-black text-sm md:text-xl leading-none">
+                        <div className="text-xs font-black leading-none text-blue-600 md:text-xl">
                            {formatRupiah(item.data.harga_terendah_baru)}
                         </div>
                      ) : (
@@ -284,10 +307,16 @@ function ComparisonContent() {
 
                      {/* Harga Bekas (Secondary) */}
                      {item.data.harga_terendah_bekas > 0 && (
-                        <div className="text-[10px] md:text-xs text-slate-500 font-medium bg-slate-50 px-2 py-0.5 rounded">
+                        <div className="rounded bg-slate-50 px-2 py-0.5 text-[9px] font-medium text-slate-500 md:text-xs">
                            Bekas: {formatRupiah(item.data.harga_terendah_bekas)}
                         </div>
                      )}
+
+                     {item.data ? (
+                        <div className="mt-1 min-h-[2rem]">
+                          {renderProductVariantBadges(item.data)}
+                        </div>
+                      ) : null}
                   </div>
                 )}
               </div>
@@ -296,21 +325,21 @@ function ComparisonContent() {
         </div>
 
         {/* Tabel Spesifikasi Lengkap */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden text-sm">
+        <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white text-sm shadow-sm md:rounded-[28px]">
           
           {/* 1. PERFORMA */}
-          <div className="bg-slate-100/80 px-4 md:px-6 py-2 md:py-3 border-b border-slate-100 flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-widest mt-0">
+          <div className="mt-0 flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/80 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 md:px-6 md:py-3 md:text-xs">
             <Cpu className="w-3 h-3 md:w-4 md:h-4" /> Performa
           </div>
           <div>
             {renderRow("Chipset", hp1?.spesifikasi?.chipset, hp2?.spesifikasi?.chipset)}
             {renderRow("AnTuTu", hp1?.spesifikasi?.skor_antutu, hp2?.spesifikasi?.skor_antutu, 'number')}
-            {renderRow("RAM/ROM", hp1?.spesifikasi?.varian_internal, hp2?.spesifikasi?.varian_internal, 'variant')}
+            {renderRow("RAM/ROM", renderProductVariantBadges(hp1), renderProductVariantBadges(hp2), 'variant')}
             {renderRow("MicroSD", hp1?.spesifikasi?.ada_slot_memori, hp2?.spesifikasi?.ada_slot_memori, 'boolean')}
           </div>
 
           {/* 2. LAYAR */}
-          <div className="bg-slate-100/80 px-4 md:px-6 py-2 md:py-3 border-y border-slate-100 flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-widest">
+          <div className="flex items-center gap-2 border-y border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/80 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 md:px-6 md:py-3 md:text-xs">
             <Monitor className="w-3 h-3 md:w-4 md:h-4" /> Layar
           </div>
           <div>
@@ -320,7 +349,7 @@ function ComparisonContent() {
           </div>
 
           {/* 3. KAMERA */}
-          <div className="bg-slate-100/80 px-4 md:px-6 py-2 md:py-3 border-y border-slate-100 flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-widest">
+          <div className="flex items-center gap-2 border-y border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/80 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 md:px-6 md:py-3 md:text-xs">
             <Camera className="w-3 h-3 md:w-4 md:h-4" /> Kamera
           </div>
           <div>
@@ -332,7 +361,7 @@ function ComparisonContent() {
           </div>
 
           {/* 4. SOUND */}
-          <div className="bg-slate-100/80 px-4 md:px-6 py-2 md:py-3 border-y border-slate-100 flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-widest">
+          <div className="flex items-center gap-2 border-y border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/80 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 md:px-6 md:py-3 md:text-xs">
             <Volume2 className="w-3 h-3 md:w-4 md:h-4" /> Sound
           </div>
           <div>
@@ -341,7 +370,7 @@ function ComparisonContent() {
           </div>
 
           {/* 5. KONEKTIVITAS */}
-          <div className="bg-slate-100/80 px-4 md:px-6 py-2 md:py-3 border-y border-slate-100 flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-widest">
+          <div className="flex items-center gap-2 border-y border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/80 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 md:px-6 md:py-3 md:text-xs">
             <Wifi className="w-3 h-3 md:w-4 md:h-4" /> Konektivitas
           </div>
           <div>
@@ -353,7 +382,7 @@ function ComparisonContent() {
           </div>
 
           {/* 6. BATERAI */}
-          <div className="bg-slate-100/80 px-4 md:px-6 py-2 md:py-3 border-y border-slate-100 flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-widest">
+          <div className="flex items-center gap-2 border-y border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/80 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 md:px-6 md:py-3 md:text-xs">
             <Battery className="w-3 h-3 md:w-4 md:h-4" /> Daya
           </div>
           <div className="pb-2 md:pb-6">

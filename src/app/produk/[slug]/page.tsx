@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Produk, ProductVariant } from "@/types";
-import { ArrowLeft, Camera, Cpu, Smartphone, Check, X, Share2, Scale, Monitor, ShoppingBag, RefreshCw, PlayCircle, MessageSquareQuote } from "lucide-react"; 
+import { ArrowLeft, Camera, Cpu, Smartphone, Check, X, Share2, Scale, Monitor, ShoppingBag, RefreshCw, PlayCircle, MessageSquareQuote, type LucideIcon } from "lucide-react"; 
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { formatPublicVariantLabel, formatVariantLabelFromNumbers } from "@/lib/variant-label";
+import { formatRupiah } from "@/lib/format";
 import { getProductBySlug } from "@/server/repositories/product-repository";
 import { SITE_NAME, absoluteUrl } from "@/lib/seo";
 import { VariantPriceSwitcher } from "./VariantPriceSwitcher";
@@ -79,12 +81,6 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 }
 
 // --- HELPERS ---
-// Format angka ke mata uang Rupiah untuk harga produk.
-const formatRupiah = (num?: number): string => {
-  if (!num) return "-";
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
-};
-
 const cleanString = (val: unknown): string => {
   return String(val || "-").replace(/[\[\]"]/g, '');
 };
@@ -124,6 +120,27 @@ const renderVarian = (data: unknown) => {
       ))}
     </div>
   );
+};
+
+const buildVariantLabels = (variants: ProductVariant[]): string[] => {
+  // Detail spesifikasi sebaiknya membaca source of truth terbaru dari tabel variant.
+  // Fallback ke field spesifikasi lama hanya dipakai kalau relasi variant memang belum tersedia.
+  return variants
+    .filter((variant) => variant.status_aktif !== false)
+    .map((variant) => {
+      const normalized = formatPublicVariantLabel(variant.label, {
+        isDefault: variant.is_default,
+        fallbackId: variant.id,
+      });
+      if (normalized) return normalized;
+
+      if (variant.ram_gb > 0 && variant.storage_gb > 0) {
+        return formatVariantLabelFromNumbers(variant.ram_gb, variant.storage_gb);
+      }
+
+      return null;
+    })
+    .filter((label): label is string => Boolean(label));
 };
 
 // Helper Gambar
@@ -185,6 +202,7 @@ export default async function ProductDetailPage(props: Props) {
   const priceSyncAt = product.price_last_updated_at || product.updated_at;
   const isPriceStale = product.price_data_status === "stale";
   const imagePath = getImageUrl(product.foto);
+  const displayedVariantLabels = buildVariantLabels(variants);
   // Structured data supaya search engine lebih mudah memahami detail produk.
   const productJsonLd = {
     "@context": "https://schema.org",
@@ -247,13 +265,13 @@ export default async function ProductDetailPage(props: Props) {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="container mx-auto grid grid-cols-1 gap-5 px-4 py-5 sm:gap-6 sm:py-8 lg:grid-cols-3 xl:gap-8">
         
         {/* KOLOM KIRI (FOTO & HARGA) */}
-        <div className="lg:col-span-1 space-y-6 h-fit lg:sticky lg:top-24">
+        <div className="h-fit space-y-4 sm:space-y-5 lg:col-span-1 lg:sticky lg:top-24">
           
           {/* Foto Produk */}
-          <div className="aspect-[4/5] lg:aspect-square bg-white rounded-3xl flex items-center justify-center relative overflow-hidden border border-slate-200 shadow-sm p-8 group">
+          <div className="group relative aspect-[4/4.5] overflow-hidden rounded-[24px] border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/70 p-6 shadow-lg shadow-slate-900/5 sm:aspect-[4/5] sm:rounded-[28px] sm:p-8 lg:aspect-square">
             {getImageUrl(product.foto) ? (
               <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-105">
                 <Image src={getImageUrl(product.foto)!} alt={product.nama_produk} fill className="object-contain" priority sizes="(max-width: 768px) 100vw, 33vw" unoptimized={true} />
@@ -271,21 +289,30 @@ export default async function ProductDetailPage(props: Props) {
           </div>
 
           {/* CARD MARKETPLACE */}
-          <Card className="border-0 shadow-xl shadow-blue-900/5 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-100">
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                     <ShoppingBag className="w-5 h-5 text-blue-600 fill-blue-100" />
-                     <h3 className="font-bold text-slate-900 text-lg">Pilihan Toko</h3>
+          <Card className="overflow-hidden rounded-[24px] border-0 bg-white shadow-xl shadow-blue-900/5 ring-1 ring-slate-100 sm:rounded-[28px]">
+            <div className="space-y-4 p-4 sm:space-y-5 sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-start gap-2.5">
+                       <div className="rounded-xl border border-blue-100 bg-blue-50 p-2 text-blue-600">
+                         <ShoppingBag className="w-4 h-4" />
+                       </div>
+                       <div>
+                         <h3 className="font-bold text-slate-900 text-lg">Pilihan Toko</h3>
+                         <p className="max-w-sm text-sm leading-relaxed text-slate-500">
+                           Pilih penawaran terbaik berdasarkan varian yang sedang aktif.
+                         </p>
+                       </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-full border border-green-200">
+                  <div className="inline-flex items-center gap-1.5 self-start rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-700">
                      <RefreshCw className="w-3 h-3" />
                      Sync: {formatTimeAgo(priceSyncAt || undefined)}
                   </div>
               </div>
 
               {isPriceStale ? (
-                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
                   Data harga terakhir cukup lama. Disarankan cek ulang marketplace sebelum transaksi.
                 </div>
               ) : null}
@@ -295,45 +322,55 @@ export default async function ProductDetailPage(props: Props) {
                   id: variant.id,
                   label: variant.label,
                   is_default: variant.is_default,
+                  status_aktif: variant.status_aktif,
                   prices: variant.prices,
                 }))}
                 fallbackLinks={sortedLinks}
                 initialVariantId={initialVariantId}
               />
 
-              <Separator className="my-5 bg-slate-100" />
-              <div className="space-y-3">
-                  <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-500 font-medium">Estimasi Bekas</span>
-                      <span className="font-bold text-slate-700">{product.harga_terendah_bekas ? formatRupiah(product.harga_terendah_bekas) : "-"}</span>
+              <div className="border-t border-slate-100 pt-4 sm:pt-5">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                {/* Estimasi bekas dipisah jadi panel kecil sendiri agar ritme visual kolom kiri
+                    lebih seimbang setelah blok penawaran utama. */}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">Estimasi Bekas</p>
+                      <p className="mt-1 text-sm text-slate-500">Referensi pasar second-hand bila tersedia.</p>
+                    </div>
+                    <span className="text-lg font-black tracking-tight text-slate-900">
+                      {product.harga_terendah_bekas ? formatRupiah(product.harga_terendah_bekas) : "-"}
+                    </span>
                   </div>
+                </div>
               </div>
             </div>
           </Card>
         </div>
 
         {/* KOLOM KANAN (CONTENT) */}
-        <div className="lg:col-span-2 space-y-8 lg:mt-2 min-w-0"> {/* Min-w-0 penting biar flex child ga overflow */}
+        <div className="min-w-0 space-y-6 lg:col-span-2 lg:mt-2 lg:space-y-8"> {/* Min-w-0 penting biar flex child ga overflow */}
           
-          <div className="lg:hidden mb-4">
+          <div className="mb-3 lg:hidden">
              <h1 className="text-2xl font-black text-slate-900 leading-tight mb-2">{product.nama_produk}</h1>
           </div>
 
-          {/* 🔥 SECTION REVIEWER CORNER (HORIZONTAL SCROLL) 🔥 */}
+          {/* Reviewer dibuat horizontal scroll supaya mobile tetap fokus ke highlight.
+              Tujuannya agar user tidak dipaksa membaca card panjang satu per satu. */}
           {product.reviews && product.reviews.length > 0 ? (
-            <section className="overflow-hidden"> {/* Wrapper agar tidak overflow layout utama */}
-                <div className="flex items-center gap-3 mb-5">
-                    <div className="bg-red-600 text-white p-2 rounded-lg shrink-0">
+            <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-5"> {/* Wrapper agar tidak overflow layout utama */}
+                <div className="mb-4 flex items-start gap-3 sm:mb-5 sm:items-center">
+                    <div className="shrink-0 rounded-2xl border border-rose-100 bg-rose-50 p-2.5 text-rose-600">
                         <PlayCircle className="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold text-slate-900 leading-none">Kata Reviewer</h2>
-                        <p className="text-xs text-slate-500 mt-1">Apa kata para ahli tentang HP ini?</p>
+                        <h2 className="text-lg font-bold leading-none text-slate-900 sm:text-xl">Kata Reviewer</h2>
+                        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500">`r`n                          Ringkasan opini reviewer agar user lebih cepat menangkap nilai produknya.`r`n                        </p>
                     </div>
                 </div>
 
                 {/* CONTAINER HORIZONTAL SCROLL */}
-                <div className="flex overflow-x-auto pb-6 gap-4 snap-x no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+                <div className="no-scrollbar -mx-2 flex snap-x gap-3 overflow-x-auto px-2 pb-2 md:mx-0 md:gap-4 md:px-0">
                     {product.reviews.map((review) => {
                         const embedUrl = getVideoEmbed(review.video_url, review.platform);
                         const isTikTok = review.platform === 'tiktok';
@@ -344,10 +381,9 @@ export default async function ProductDetailPage(props: Props) {
                                 // LOGIC SIZE CARD ADAPTIF
                                 // TikTok: Lebar 280px (Ramping)
                                 // YouTube: Lebar 320px - 450px (Lebar)
-                                className={`
-                                    bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col flex-none snap-center
-                                    ${isTikTok ? 'w-70' : 'w-[300px] md:w-[450px]'}
-                                `}
+                                className={`flex flex-none snap-center flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                                    isTikTok ? 'w-[76vw] max-w-[280px] sm:w-[280px]' : 'w-[85vw] max-w-[360px] sm:w-[340px] md:w-[450px]'
+                                }`}
                             >
                                 {/* Video Player Container */}
                                 <div className={`w-full relative bg-black ${isTikTok ? 'aspect-[9/16]' : 'aspect-video'}`}>
@@ -372,18 +408,18 @@ export default async function ProductDetailPage(props: Props) {
                                 </div>
 
                                 {/* Quote & Info */}
-                                <div className="p-4 flex flex-col grow">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Badge variant="outline" className="text-[10px] font-bold text-slate-700 border-slate-300">
+                                <div className="flex grow flex-col bg-white p-3.5 sm:p-4">
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <Badge variant="outline" className="border-slate-300 text-[10px] font-bold text-slate-700">
                                             {review.reviewer_name}
                                         </Badge>
-                                        <span className="text-[9px] text-slate-400 uppercase tracking-wider font-medium">{review.platform}</span>
+                                        <span className="text-[9px] font-medium uppercase tracking-wider text-slate-400">{review.platform}</span>
                                     </div>
                                     
                                     {review.highlight_quote && (
-                                        <div className="relative pl-5 mt-1">
-                                            <MessageSquareQuote className="w-6 h-6 text-slate-100 absolute -top-1 -left-1 -z-0" />
-                                            <p className="text-xs text-slate-600 italic leading-relaxed relative z-10 font-medium line-clamp-3">
+                                        <div className="relative mt-1 rounded-2xl border border-slate-100 bg-slate-50 px-3.5 py-3 sm:px-4">
+                                            <MessageSquareQuote className="absolute left-3 top-3 h-5 w-5 text-slate-200" />
+                                            <p className="relative z-10 pl-6 text-[13px] font-medium italic leading-relaxed text-slate-600 line-clamp-5 sm:text-sm">
                                                 {review.highlight_quote}
                                             </p>
                                         </div>
@@ -395,8 +431,8 @@ export default async function ProductDetailPage(props: Props) {
                 </div>
             </section>
           ) : (
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex items-center gap-4">
-                 <div className="bg-blue-100 p-3 rounded-full text-blue-600">
+            <div className="flex items-center gap-4 rounded-[24px] border border-blue-100 bg-blue-50 p-5 sm:rounded-[28px] sm:p-6">
+                 <div className="rounded-full bg-blue-100 p-3 text-blue-600">
                     <PlayCircle className="w-6 h-6" />
                  </div>
                  <div>
@@ -408,69 +444,71 @@ export default async function ProductDetailPage(props: Props) {
 
           {/* SPESIFIKASI LENGKAP */}
           <section>
-            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-900 sm:mb-6 sm:text-xl">
                 <Cpu className="w-5 h-5 text-slate-700" /> Spesifikasi Teknis
             </h2>
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm text-sm">
-              {/* ... Bagian Spesifikasi Tetap Sama ... */}
-              <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-widest">Body & Desain</div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-sm shadow-sm">
+              <SpecSectionHeader label="Body & Desain" />
               <div className="divide-y divide-slate-50">
                 <SpecRow label="Dimensi" value={product.spesifikasi?.dimensi} />
                 <SpecRow label="Berat" value={product.spesifikasi?.berat} />
                 <SpecRow label="Ketahanan" value={product.spesifikasi?.rating_ip} />
               </div>
-              <div className="bg-slate-50 px-6 py-3 border-y border-slate-100 flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-widest"><Monitor className="w-4 h-4"/> Layar</div>
+              <SpecSectionHeader label="Layar" icon={Monitor} />
               <div className="divide-y divide-slate-50">
                 <SpecRow label="Tipe Panel" value={product.spesifikasi?.tipe_layar} />
                 <SpecRow label="Ukuran" value={product.spesifikasi?.ukuran_layar ? `${product.spesifikasi.ukuran_layar} Inci` : "-"} />
                 <SpecRow label="Resolusi" value={product.spesifikasi?.resolusi} />
               </div>
-              <div className="bg-slate-50 px-6 py-3 border-y border-slate-100 flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-widest"><Cpu className="w-4 h-4"/> Hardware</div>
+              <SpecSectionHeader label="Hardware" icon={Cpu} />
               <div className="divide-y divide-slate-50">
-                <div className="grid grid-cols-3 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-                  <span className="text-sm font-medium text-slate-500">Chipset</span>
-                  <span className="col-span-2 text-sm font-bold text-blue-900">{cleanString(product.spesifikasi?.chipset)}</span>
-                </div>
-                <div className="grid grid-cols-3 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-                  <span className="text-sm font-medium text-slate-500">RAM/ROM</span>
-                  <div className="col-span-2">{renderVarian(product.spesifikasi?.varian_internal)}</div>
-                </div>
-                <div className="grid grid-cols-3 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-                  <span className="text-sm font-medium text-slate-500">Slot MicroSD</span>
-                  <span className="col-span-2 text-sm text-slate-900 font-medium flex items-center gap-2">
-                    {product.spesifikasi?.ada_slot_memori ? <><Check className="w-4 h-4 text-green-600" /> Ada</> : <><X className="w-4 h-4 text-slate-400" /> Tidak Ada</>}
-                  </span>
-                </div>
+                <SpecContentRow label="Chipset" emphasize>
+                  <span className="text-sm font-bold text-blue-900">{cleanString(product.spesifikasi?.chipset)}</span>
+                </SpecContentRow>
+                <SpecContentRow label="RAM/ROM">
+                  <div>
+                    {displayedVariantLabels.length > 0
+                      ? renderVarian(displayedVariantLabels)
+                      : renderVarian(product.spesifikasi?.varian_internal)}
+                  </div>
+                </SpecContentRow>
+                <SpecBooleanRow
+                  label="Slot MicroSD"
+                  value={Boolean(product.spesifikasi?.ada_slot_memori)}
+                  trueLabel="Ada"
+                  falseLabel="Tidak Ada"
+                />
               </div>
-              <div className="bg-slate-50 px-6 py-3 border-y border-slate-100 flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-widest"><Camera className="w-4 h-4"/> Kamera</div>
+              <SpecSectionHeader label="Kamera" icon={Camera} />
               <div className="divide-y divide-slate-50">
                  <SpecRow label="Kamera Utama" value={product.spesifikasi?.kamera_utama_mp ? `${product.spesifikasi.kamera_utama_mp} MP` : "-"} />
                  <SpecRow label="Fitur" value={product.spesifikasi?.detail_kamera_utama} />
                  <SpecRow label="Video Belakang" value={product.spesifikasi?.kamera_utama_video} />
                  <SpecRow label="Kamera Selfie" value={product.spesifikasi?.kamera_selfie_mp ? `${product.spesifikasi.kamera_selfie_mp} MP` : "-"} />
               </div>
-              <div className="bg-slate-50 px-6 py-3 border-y border-slate-100 flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-widest">Fitur & Lainnya</div>
+              <SpecSectionHeader label="Fitur & Lainnya" />
               <div className="divide-y divide-slate-50">
-                <div className="grid grid-cols-3 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-                  <span className="text-sm font-medium text-slate-500">NFC</span>
-                  <span className="col-span-2 text-sm text-slate-900 font-medium flex items-center gap-2">
-                    {product.spesifikasi?.ada_nfc ? <><Check className="w-4 h-4 text-green-600" /> Support</> : <><X className="w-4 h-4 text-slate-400" /> Tidak Support</>}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-                  <span className="text-sm font-medium text-slate-500">Baterai</span>
-                  <span className="col-span-2 text-sm text-slate-900 font-medium">
-                    {product.spesifikasi?.kapasitas_baterai ? `${product.spesifikasi.kapasitas_baterai} mAh` : "-"}
-                    <span className="block text-xs text-slate-400 mt-1">{cleanString(product.spesifikasi?.kecepatan_cas)}</span>
-                  </span>
-                </div>
-                <SpecRow label="Speaker" value={product.spesifikasi?.sound_loudspeaker} />
-                <div className="grid grid-cols-3 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-                    <span className="text-sm font-medium text-slate-500">3.5mm Jack</span>
-                    <span className="col-span-2 text-sm text-slate-900 font-medium flex items-center gap-2">
-                      {product.spesifikasi?.sound_jack ? <><Check className="w-4 h-4 text-green-600" /> Ada</> : <><X className="w-4 h-4 text-slate-400" /> Tidak Ada</>}
+                <SpecBooleanRow
+                  label="NFC"
+                  value={Boolean(product.spesifikasi?.ada_nfc)}
+                  trueLabel="Support"
+                  falseLabel="Tidak Support"
+                />
+                <SpecContentRow label="Baterai">
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {product.spesifikasi?.kapasitas_baterai ? `${product.spesifikasi.kapasitas_baterai} mAh` : "-"}
                     </span>
-                </div>
+                    <span className="mt-1 block text-xs text-slate-400">{cleanString(product.spesifikasi?.kecepatan_cas)}</span>
+                  </div>
+                </SpecContentRow>
+                <SpecRow label="Speaker" value={product.spesifikasi?.sound_loudspeaker} />
+                <SpecBooleanRow
+                  label="3.5mm Jack"
+                  value={Boolean(product.spesifikasi?.sound_jack)}
+                  trueLabel="Ada"
+                  falseLabel="Tidak Ada"
+                />
                 <SpecRow label="WLAN" value={product.spesifikasi?.comms_wlan} />
                 <SpecRow label="Bluetooth" value={product.spesifikasi?.comms_bluetooth} />
                 <SpecRow label="USB" value={product.spesifikasi?.comms_usb} />
@@ -483,12 +521,54 @@ export default async function ProductDetailPage(props: Props) {
   );
 }
 
-const SpecRow = ({ label, value }: { label: string, value: unknown }) => (
-   <div className="grid grid-cols-3 px-6 py-4 hover:bg-slate-50/50 transition-colors">
-      <span className="text-sm font-medium text-slate-500">{label}</span>
-      <span className="col-span-2 text-sm text-slate-900 font-medium break-words">
-          {cleanString(value)}
-      </span>
-   </div>
+const SpecSectionHeader = ({ label, icon: Icon }: { label: string; icon?: LucideIcon }) => (
+  <div className="flex items-center gap-2 border-y border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100/70 px-6 py-3">
+    {Icon ? <Icon className="h-4 w-4 text-slate-500" /> : null}
+    <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">{label}</span>
+  </div>
 );
+
+const SpecContentRow = ({
+  label,
+  children,
+  emphasize = false,
+}: {
+  label: string;
+  children: ReactNode;
+  emphasize?: boolean;
+}) => (
+  // Helper ini dipakai untuk semua row spesifikasi agar ritme label/value konsisten
+  // dan lebih mudah dipindai di desktop maupun mobile.
+  <div className="grid gap-2 px-6 py-4 transition-colors hover:bg-slate-50/50 sm:grid-cols-[180px,1fr] sm:gap-6">
+    <span className="text-sm font-medium text-slate-500">{label}</span>
+    <div className={emphasize ? "text-sm font-semibold text-slate-900 break-words" : "break-words"}>{children}</div>
+  </div>
+);
+
+const SpecRow = ({ label, value }: { label: string; value: unknown }) => (
+  <SpecContentRow label={label}>
+    <span className="text-sm font-medium text-slate-900">{cleanString(value)}</span>
+  </SpecContentRow>
+);
+
+const SpecBooleanRow = ({
+  label,
+  value,
+  trueLabel,
+  falseLabel,
+}: {
+  label: string;
+  value: boolean;
+  trueLabel: string;
+  falseLabel: string;
+}) => (
+  <SpecContentRow label={label}>
+    <span className="flex items-center gap-2 text-sm font-medium text-slate-900">
+      {value ? <Check className="h-4 w-4 text-green-600" /> : <X className="h-4 w-4 text-slate-400" />}
+      {value ? trueLabel : falseLabel}
+    </span>
+  </SpecContentRow>
+);
+
+
 

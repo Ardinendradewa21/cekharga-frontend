@@ -30,7 +30,7 @@ export default function MobileFilter({ onFilterChange }: MobileFilterProps) {
       </SheetTrigger>
 
       {/* ISI DRAWER (Muncul dari Kiri) */}
-      <SheetContent side="left" className="w-75 sm:w-75 p-0 overflow-y-auto">
+      <SheetContent side="left" className="w-full max-w-[22rem] p-0 overflow-y-auto">
         
         <SheetHeader className="px-5 pt-5 pb-0 text-left">
           <SheetTitle>Filter Produk</SheetTitle>
@@ -41,10 +41,7 @@ export default function MobileFilter({ onFilterChange }: MobileFilterProps) {
 
         {/* Panggil Logic Sidebar yang sudah ada */}
         {/* Kita hilangkan border & shadow karena sudah di dalam sheet */}
-        <FilterSidebar 
-          onFilterChange={handleFilterChange} 
-          className="border-none shadow-none sticky-0"
-        />
+        <FilterSidebar onFilterChange={handleFilterChange} className="rounded-none border-none shadow-none" />
         
       </SheetContent>
     </Sheet>

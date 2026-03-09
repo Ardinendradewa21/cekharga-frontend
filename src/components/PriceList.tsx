@@ -5,6 +5,7 @@ import { MarketplaceLink } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingBag, ExternalLink, Store } from "lucide-react";
+import { formatRupiah } from "@/lib/format";
 
 interface PriceListProps {
   links?: MarketplaceLink[];
@@ -20,10 +21,6 @@ export default function PriceList({ links = [] }: PriceListProps) {
   const filteredLinks = activeLinks
     .filter(l => l.kondisi === activeTab)
     .sort((a, b) => Number(a.harga) - Number(b.harga)); // Urutkan termurah
-
-  // Helper Format Rupiah
-  const formatRupiah = (num: number) => 
-    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
 
   // Helper Warna Marketplace
   const getMarketplaceStyle = (name: string) => {

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import Link from "next/link";
 import { Produk, ApiResponse } from "@/types";
+import { formatRupiah } from "@/lib/format";
 
 // --- 1. LOGIC GAMBAR (DIPERBAIKI & DISAMAKAN DENGAN CARD) ---
 const getImageUrl = (path: string | null | undefined): string | null => {
@@ -35,9 +36,6 @@ const getImageUrl = (path: string | null | undefined): string | null => {
   }
 };
 
-const formatRupiah = (num: number) => {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
-};
 
 export default function HeroSection() {
   const router = useRouter();

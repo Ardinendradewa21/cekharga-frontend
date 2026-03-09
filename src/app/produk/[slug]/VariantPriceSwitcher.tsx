@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+import { formatMarketplaceDisplayName, formatStoreLine } from "@/lib/public-display";
+import { formatPublicVariantLabel } from "@/lib/variant-label";
+import { formatRupiah } from "@/lib/format";
 
 type MarketplaceLinkItem = {
   id: number;
@@ -21,8 +26,9 @@ type MarketplaceLinkItem = {
 
 type VariantItem = {
   id: number;
-  label: string;
+  label: string | null;
   is_default: boolean;
+  status_aktif?: boolean;
   prices: MarketplaceLinkItem[];
 };
 
@@ -43,18 +49,29 @@ function getImageUrl(path: string | null | undefined): string | null {
 function getMarketplaceFallback(name: string) {
   const value = name.toLowerCase();
   if (value.includes("shopee")) {
-    return { classColor: "bg-[#EE4D2D]", label: "Shopee" };
+    return { accentColor: "#EE4D2D", label: "Shopee" };
   }
   if (value.includes("tokopedia")) {
-    return { classColor: "bg-[#03AC0E]", label: "Tokopedia" };
+    return { accentColor: "#03AC0E", label: "Tokopedia" };
   }
   if (value.includes("blibli")) {
-    return { classColor: "bg-[#0095DA]", label: "Blibli" };
+    return { accentColor: "#0095DA", label: "Blibli" };
   }
   if (value.includes("lazada")) {
-    return { classColor: "bg-[#0f146d]", label: "Lazada" };
+    return { accentColor: "#0f146d", label: "Lazada" };
   }
-  return { classColor: "bg-slate-900", label: name };
+  return { accentColor: "#0f172a", label: name };
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "");
+  if (normalized.length !== 6) return `rgba(15, 23, 42, ${alpha})`;
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export function VariantPriceSwitcher({
@@ -62,80 +79,158 @@ export function VariantPriceSwitcher({
   fallbackLinks,
   initialVariantId,
 }: VariantPriceSwitcherProps) {
-  const defaultVariant = variants.find((variant) => variant.is_default) ?? variants[0] ?? null;
-  const initialSelectedVariant = useMemo(() => {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const availableVariants = useMemo(() => {
+    const activeOnly = variants.filter((variant) => variant.status_aktif !== false);
+    // Detail page hanya sebaiknya menawarkan varian aktif.
+    // Fallback ke semua varian hanya untuk jaga-jaga saat data lama belum lengkap.
+    return activeOnly.length > 0 ? activeOnly : variants;
+  }, [variants]);
+
+  const defaultVariant =
+    availableVariants.find((variant) => variant.is_default) ?? availableVariants[0] ?? null;
+  const initialActiveVariant = useMemo(() => {
     if (typeof initialVariantId === "number" && Number.isFinite(initialVariantId) && initialVariantId > 0) {
-      return variants.find((variant) => variant.id === initialVariantId) ?? defaultVariant;
+      return availableVariants.find((variant) => variant.id === initialVariantId) ?? defaultVariant;
     }
     return defaultVariant;
-  }, [defaultVariant, initialVariantId, variants]);
-  const initialSelectedVariantId = initialSelectedVariant?.id ?? 0;
-  const [selectedVariantId, setSelectedVariantId] = useState<number>(initialSelectedVariantId);
+  }, [availableVariants, defaultVariant, initialVariantId]);
+  const initialActiveVariantId = initialActiveVariant?.id ?? 0;
+  const [activeVariantId, setActiveVariantId] = useState<number>(initialActiveVariantId);
 
   useEffect(() => {
-    setSelectedVariantId(initialSelectedVariantId);
-  }, [initialSelectedVariantId]);
+    setActiveVariantId(initialActiveVariantId);
+  }, [initialActiveVariantId]);
 
-  const selectedVariant = useMemo(() => {
-    if (!selectedVariantId) return defaultVariant;
-    return variants.find((variant) => variant.id === selectedVariantId) ?? defaultVariant;
-  }, [defaultVariant, selectedVariantId, variants]);
+  const activeVariant = useMemo(() => {
+    if (!activeVariantId) return defaultVariant;
+    return availableVariants.find((variant) => variant.id === activeVariantId) ?? defaultVariant;
+  }, [activeVariantId, availableVariants, defaultVariant]);
 
   const links = useMemo(() => {
-    const sourceLinks =
-      selectedVariant && selectedVariant.prices.length > 0 ? selectedVariant.prices : fallbackLinks;
+    if (!activeVariant) {
+      return [...fallbackLinks]
+        .filter((link) => link.status_aktif !== false)
+        .sort((a, b) => a.harga - b.harga);
+    }
 
-    return [...sourceLinks]
+    return [...activeVariant.prices]
       .filter((link) => link.status_aktif !== false)
       .sort((a, b) => a.harga - b.harga);
-  }, [fallbackLinks, selectedVariant]);
+  }, [activeVariant, fallbackLinks]);
 
   const lowestPriceId = links[0]?.id ?? null;
-  const formatRupiah = (value: number): string =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(value);
+  const lowestPriceLink = links[0] ?? null;
+  const formatVariantLabel = (variant: VariantItem): string => {
+    return (
+      formatPublicVariantLabel(variant.label, {
+        isDefault: variant.is_default,
+        fallbackId: variant.id,
+      }) ?? `Varian #${variant.id}`
+    );
+  };
+
+  const activeVariantLabel = activeVariant ? formatVariantLabel(activeVariant) : null;
+  const leadingMarketplaceName = formatMarketplaceDisplayName(
+    lowestPriceLink?.nama_marketplace || lowestPriceLink?.marketplace?.nama || "Marketplace",
+  );
+  const hasVariantChoice = availableVariants.length > 1;
+
+  function handleVariantChange(variantId: number) {
+    setActiveVariantId(variantId);
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("variant", String(variantId));
+
+    // URL query ikut diperbarui supaya state varian bisa di-share / di-refresh
+    // tanpa perlu mengubah logika fetch server-side yang sudah ada.
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+  }
 
   return (
-    <div className="space-y-3">
-      {variants.length > 0 ? (
-        <div className="space-y-1">
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pilih Varian</label>
-          <select
-            value={selectedVariant?.id ?? 0}
-            onChange={(event) => setSelectedVariantId(Number(event.target.value))}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-          >
-            {variants.map((variant) => (
-              <option key={variant.id} value={variant.id}>
-                {variant.label}
-              </option>
-            ))}
-          </select>
+    <div className="space-y-3.5 sm:space-y-4">
+      {availableVariants.length > 0 ? (
+        <div className="space-y-3">
+          {hasVariantChoice ? (
+            <>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pilih Varian</label>
+                <span className="text-xs text-slate-400">Harga dan toko akan menyesuaikan pilihanmu.</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {availableVariants.map((variant) => (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() => handleVariantChange(variant.id)}
+                    aria-pressed={activeVariant?.id === variant.id}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      activeVariant?.id === variant.id
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
+                    }`}
+                  >
+                    {formatVariantLabel(variant)}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : activeVariantLabel ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Varian Tersedia</p>
+              <p className="mt-1 text-sm font-bold text-slate-900">{activeVariantLabel}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="space-y-3">
+      {lowestPriceLink ? (
+        <div className="flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Ringkasan dijadikan strip metadata pendek supaya panel kiri tidak terasa
+              punya "card di dalam card" sebelum daftar toko yang menjadi aksi utama. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-bold text-blue-700">
+              {activeVariantLabel ?? "Varian Utama"}
+            </span>
+            <span>{links.length} toko aktif</span>
+            <span className="text-slate-300">/</span>
+            <span>Termurah di {leadingMarketplaceName}</span>
+          </div>
+          <span className="text-base font-black tracking-tight text-slate-900 sm:text-lg">
+            {formatRupiah(lowestPriceLink.harga)}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="space-y-2.5">
         {links.length > 0 ? (
           links.map((link) => {
             const marketplace = link.marketplace;
-            const marketplaceName = marketplace?.nama || link.nama_marketplace || "Marketplace";
+            const marketplaceName = formatMarketplaceDisplayName(
+              marketplace?.nama || link.nama_marketplace || "Marketplace",
+            );
             const fallback = getMarketplaceFallback(marketplaceName);
-            const hasDbColor = Boolean(marketplace?.warna_hex);
-            const style = hasDbColor ? { backgroundColor: marketplace?.warna_hex } : undefined;
-            const textColor = marketplace?.text_color || "#ffffff";
+            const accentColor = marketplace?.warna_hex || fallback.accentColor;
             const logo = getImageUrl(marketplace?.logo);
+            const badgeStyle = {
+              borderColor: hexToRgba(accentColor, 0.25),
+              backgroundColor: hexToRgba(accentColor, 0.1),
+              color: accentColor,
+            };
+            const cardStyle = {
+              borderLeftColor: accentColor,
+            };
 
             return (
               <a key={link.id} href={link.url_produk} target="_blank" rel="noreferrer" className="group block">
                 <div
-                  className={`relative flex items-center justify-between overflow-hidden rounded-xl border border-transparent p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${hasDbColor ? "" : fallback.classColor}`}
-                  style={style}
+                  className="relative rounded-2xl border border-slate-200 border-l-4 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-3.5"
+                  style={cardStyle}
                 >
                   <div className="flex w-full items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-1.5 shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-2 shadow-sm sm:h-11 sm:w-11">
                       {logo ? (
                         <Image
                           src={logo}
@@ -150,23 +245,28 @@ export function VariantPriceSwitcher({
                       )}
                     </div>
 
-                    <div className="min-w-0 flex-1" style={{ color: textColor }}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="whitespace-nowrap text-lg font-black tracking-tight">
-                          {formatRupiah(link.harga)}
+                    <div className="min-w-0 flex-1 text-slate-900">
+                      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full border px-2 py-0.5 text-[10px] font-bold" style={badgeStyle}>
+                          {marketplaceName}
                         </span>
                         {lowestPriceId === link.id ? (
-                          <span className="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-green-700 shadow-sm">
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                             Termurah
                           </span>
                         ) : null}
                       </div>
-                      <span className="block truncate text-[11px] font-medium opacity-90">
-                        {link.nama_toko || marketplaceName} - {link.kondisi}
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span className="whitespace-nowrap text-base font-black tracking-tight sm:text-lg">
+                          {formatRupiah(link.harga)}
+                        </span>
+                      </div>
+                      <span className="mt-1 block truncate text-[11px] font-medium text-slate-500">
+                        {formatStoreLine(link.nama_toko, marketplaceName, link.kondisi)}
                       </span>
                     </div>
 
-                    <div className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-900 shadow-sm transition-transform group-hover:scale-105">
+                    <div className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-sm transition-transform group-hover:scale-105 sm:px-4 sm:py-2">
                       Beli
                     </div>
                   </div>
@@ -183,4 +283,3 @@ export function VariantPriceSwitcher({
     </div>
   );
 }
-
