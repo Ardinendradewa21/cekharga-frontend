@@ -397,7 +397,7 @@ export async function deleteMarketplaceMasterDataAction(
       prisma.marketplaceLink.count({
         where: { marketplace_id: targetId },
       }),
-      prisma.productPrice.count({
+      prisma.marketplacePrice.count({
         where: { marketplace_id: targetId },
       }),
     ]);

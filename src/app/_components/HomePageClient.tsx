@@ -19,7 +19,6 @@ const DEFAULT_FILTERS: FilterState = {
   min_price: "",
   max_price: "",
   use_case: "",
-  has_nfc: "",
 };
 
 function HomeContent() {
@@ -98,8 +97,6 @@ function HomeContent() {
     if (filters.min_price) params.append("min_price", filters.min_price);
     if (filters.max_price) params.append("max_price", filters.max_price);
     if (filters.use_case) params.append("use_case", filters.use_case);
-    if (filters.has_nfc) params.append("has_nfc", filters.has_nfc);
-        
         params.append("sort", sortOption);
         params.append("page", page.toString());
 
@@ -160,19 +157,19 @@ function HomeContent() {
       </div>
       
       {/* STICKY SEARCH & FILTER BAR */}
-      <div id="product-section" className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all py-3">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+      <div id="product-section" className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 py-2.5 shadow-sm backdrop-blur-md transition-all">
+        <div className="mx-auto w-full max-w-[1820px] px-3 sm:px-4 xl:px-5">
+          <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
             
             {/* --- SEARCH BAR KECIL --- */}
-            <div className={`relative w-full md:max-w-md group transition-all duration-300 ${showStickySearch ? 'opacity-100 translate-y-0 visible' : 'opacity-0 -translate-y-2 invisible'}`}>
+            <div className={`group relative w-full transition-all duration-300 md:max-w-md ${showStickySearch ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-2 opacity-0'}`}>
                 <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                 </div>
                 <Input 
                   type="text" 
                   placeholder="Cari HP di sini..." 
-                  className="pl-10 h-10 rounded-full border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm shadow-sm transition-all"
+                  className="h-10 rounded-full border-slate-200 bg-slate-50 pl-10 text-sm shadow-sm transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -191,8 +188,8 @@ function HomeContent() {
             </div>
 
             {/* SORTING & FILTER */}
-            <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-                <span className="text-xs text-slate-500 hidden sm:inline-block">
+            <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-end">
+                <span className="hidden text-xs text-slate-500 sm:inline-block">
                     Menampilkan <span className="font-bold text-slate-900">{products.length}</span> produk
                 </span>
                 
@@ -203,7 +200,7 @@ function HomeContent() {
                     </div>
                     
                     <select 
-                        className="bg-white border border-slate-200 text-xs sm:text-sm rounded-lg p-2 pr-8 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer h-10"
+                        className="h-10 cursor-pointer rounded-lg border border-slate-200 bg-white p-2 pr-8 text-xs outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
                         value={sortOption}
                         onChange={(e) => setSortOption(e.target.value)}
                     >
@@ -245,17 +242,17 @@ function HomeContent() {
       )}
 
       {/* MAIN CONTENT */}
-      <main className="grow container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <main className="grow mx-auto w-full max-w-[1900px] px-2 py-5 sm:px-4 sm:py-7 xl:px-5">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 xl:gap-7">
           
-          <div className="hidden lg:block lg:col-span-1 h-fit sticky top-24">
+          <div className="hidden h-fit lg:block lg:w-[210px] lg:sticky lg:top-24">
              {/* UPDATE: Pakai handleFilterChange */}
              <FilterSidebar onFilterChange={handleFilterChange} />
           </div>
 
-          <div className="lg:col-span-3">
+          <div className="min-w-0">
              {loading ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 md:gap-5">
                   {[...Array(8)].map((_, i) => (
                     <div key={i} className="h-80 bg-slate-200/50 rounded-3xl animate-pulse" />
                   ))}
@@ -264,7 +261,7 @@ function HomeContent() {
                 <>
                   {products.length > 0 ? (
                     <>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 md:gap-5">
                         {products.map((product) => (
                           <ProductCard 
                             key={product.id} 

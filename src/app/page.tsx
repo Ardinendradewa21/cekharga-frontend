@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 
-import HomePageClient from "./_components/HomePageClient";
-
 import { SITE_DESCRIPTION, SITE_NAME, absoluteUrl } from "@/lib/seo";
+import HomePageClientLoader from "./_components/HomePageClientLoader";
 
 export const metadata: Metadata = {
-  title: `${SITE_NAME} - Aggregator Harga HP Baru & Bekas`,
+  title: `${SITE_NAME} - Aggregator Harga & Spesifikasi HP`,
   description: SITE_DESCRIPTION,
   alternates: {
     canonical: absoluteUrl("/"),
   },
   openGraph: {
-    title: `${SITE_NAME} - Aggregator Harga HP Baru & Bekas`,
+    title: `${SITE_NAME} - Aggregator Harga & Spesifikasi HP`,
     description: SITE_DESCRIPTION,
     type: "website",
     url: absoluteUrl("/"),
@@ -19,7 +18,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} - Aggregator Harga HP`,
+    title: `${SITE_NAME} - Aggregator Harga & Spesifikasi HP`,
     description: SITE_DESCRIPTION,
   },
 };
@@ -43,7 +42,7 @@ export default function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
       />
-      <HomePageClient />
+      <HomePageClientLoader />
     </>
   );
 }

@@ -1,16 +1,10 @@
-import crypto from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import sharp from "sharp";
-
 import { jsonError, jsonSuccess } from "@/server/api/response";
 import { requireAdminSession } from "@/server/auth/admin";
+import { processAndSaveImage } from "@/server/utils/save-image";
 
 export const runtime = "nodejs";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const MAX_OUTPUT_SIZE = 3 * 1024 * 1024;
-const MAX_DIMENSION = 1600;
 const ALLOWED_TYPES = new Set(["jpeg", "png", "webp"]);
 const ALLOWED_BUCKETS = new Set(["hp", "brands", "marketplaces"]);
 
@@ -74,50 +68,15 @@ export async function POST(request: Request) {
       return jsonError("Format gambar harus JPEG/PNG/WEBP valid.", 400);
     }
 
-    const image = sharp(originalBuffer, {
-      failOn: "error",
-      limitInputPixels: 64_000_000,
-    }).rotate();
-
-    const metadata = await image.metadata();
-    if (!metadata.width || !metadata.height) {
-      return jsonError("Gagal membaca dimensi gambar.", 400);
-    }
-
-    const processed = await image
-      .resize({
-        width: MAX_DIMENSION,
-        height: MAX_DIMENSION,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .webp({
-        quality: 82,
-        effort: 4,
-      })
-      .toBuffer();
-
-    if (processed.length > MAX_OUTPUT_SIZE) {
-      return jsonError("Hasil kompresi gambar masih terlalu besar (maks 3MB).", 400);
-    }
-
-    const fileName = `${Date.now()}-${crypto.randomUUID()}.webp`;
-    const relativePath = path.posix.join("uploads", bucket, fileName);
-    const uploadDir = path.join(process.cwd(), "public", "uploads", bucket);
-    const outputPath = path.join(uploadDir, fileName);
-
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(outputPath, processed);
+    const relativePath = await processAndSaveImage(originalBuffer, bucket);
 
     const origin = new URL(request.url).origin;
     return jsonSuccess(
-      {
-        path: relativePath,
-        url: `${origin}/${relativePath}`,
-      },
+      { path: relativePath, url: `${origin}/${relativePath}` },
       "Gambar berhasil diupload.",
     );
-  } catch {
-    return jsonError("Gagal mengupload gambar.", 500);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error.";
+    return jsonError(`Gagal mengupload gambar: ${message}`, 500);
   }
 }

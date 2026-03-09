@@ -6,6 +6,7 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatRupiah } from "@/lib/format";
 
 type MarketplaceOption = {
   id: number;
@@ -110,14 +111,6 @@ function toPreviewUrl(value: string) {
   if (value.startsWith("http://") || value.startsWith("https://")) return value;
   const clean = value.startsWith("/") ? value.slice(1) : value;
   return `/${clean}`;
-}
-
-function formatRupiah(value: number): string {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 export function MarketplaceLinksEditor({
